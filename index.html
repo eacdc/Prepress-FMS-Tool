@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prepress FMS - Admin Dashboard</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="app-header">
+      <div class="header-content">
+        <div class="header-left">
+          <div class="logo-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
+            </svg>
+          </div>
+          <h1>Prepress FMS - Admin Dashboard</h1>
+        </div>
+        <div class="header-right">
+          <button id="btn-user-wise-pending" class="btn-primary small">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+              <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+            </svg>
+            User Wise Pending
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="app-main">
+      <!-- View Toggle -->
+      <section class="view-toggle-section">
+        <div class="view-toggle-container">
+          <button id="btn-view-pending" class="view-toggle-btn active" data-view="pending">Pending</button>
+          <button id="btn-view-completed" class="view-toggle-btn" data-view="completed">Completed</button>
+        </div>
+      </section>
+
+      <!-- Source Filter -->
+      <section class="source-filter-section">
+        <div class="source-filter-container">
+          <label class="source-filter-label">Filter by Source:</label>
+          <div class="source-filter-options">
+            <label class="source-filter-option">
+              <input type="checkbox" id="filter-kolkata" data-source="KOLKATA" checked />
+              <span>Kolkata</span>
+            </label>
+            <label class="source-filter-option">
+              <input type="checkbox" id="filter-ahmedabad" data-source="AHMEDABAD" checked />
+              <span>Ahmedabad</span>
+            </label>
+            <label class="source-filter-option">
+              <input type="checkbox" id="filter-unordered" data-source="UNORDERED" checked />
+              <span>Unordered</span>
+            </label>
+          </div>
+          <button id="btn-add-entry" class="btn-primary small">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+              <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+            </svg>
+            Add Entry
+          </button>
+        </div>
+      </section>
+
+      <!-- Table Container -->
+      <section id="table-section" class="table-section">
+        <div class="table-header-info">
+          <span class="pending-count-display" id="pending-count-display">
+            <strong>0</strong> pending entries
+          </span>
+        </div>
+        <div class="table-wrapper">
+          <div class="table-scroll-container">
+            <table id="prepress-table" class="prepress-table">
+              <thead>
+                <tr class="table-header-row">
+                  <th>SO Date</th>
+                  <th>PO Date</th>
+                  <th>SO No</th>
+                  <th>PWO No</th>
+                  <th>PWO Date</th>
+                  <th>Job Name</th>
+                  <th>Ref P.C.C...</th>
+                  <th>Client Name</th>
+                  <th>Division</th>
+                  <th>Prepress Person</th>
+                  <th>File</th>
+                  <th>File Received Date</th>
+                  <th>Soft Approval Reqd</th>
+                  <th>Soft Approval Status</th>
+                  <th>Soft Approval Sent Plan Date</th>
+                  <th>Soft Approval Sent Act date</th>
+                  <th>Link of Soft Approval file</th>
+                  <th>Hard Approval Reqd</th>
+                  <th>Hard Approval Status</th>
+                  <th>Hard Approval Sent Plan Date</th>
+                  <th>Hard Approval Sent Act date</th>
+                  <th>MProof Approval Reqd</th>
+                  <th>MProof Approval Status</th>
+                  <th>MProof Approval Sent Plan Date</th>
+                  <th>MProof Approval Sent Act date</th>
+                  <th>Finally Approved</th>
+                  <th>Finally Approved Date</th>
+                  <th>Artwork Remark</th>
+                  <th>Tooling Person</th>
+                  <th>Tooling Die</th>
+                  <th>Tooling Block</th>
+                  <th>Tooling Remark</th>
+                  <th>Blanket</th>
+                  <th>Tooling Blanket Plan</th>
+                  <th>Tooling Blanket Actual</th>
+                  <th>Plate Person</th>
+                  <th>Plate Output</th>
+                  <th>Plate Plan</th>
+                  <th>Plate Actual</th>
+                  <th>Plate Remark</th>
+                </tr>
+                <tr class="filter-row">
+                  <th>
+                    <input type="date" class="filter-date" data-column="soDate" />
+                  </th>
+                  <th>
+                    <input type="date" class="filter-date" data-column="poDate" />
+                  </th>
+                  <th>
+                    <input type="text" class="filter-input" data-column="soNo" placeholder="Search" />
+                  </th>
+                  <th>
+                    <input type="text" class="filter-input" data-column="pwoNo" placeholder="Search" />
+                  </th>
+                  <th>
+                    <input type="date" class="filter-date" data-column="pwoDate" />
+                  </th>
+                  <th>
+                    <input type="text" class="filter-input" data-column="jobName" placeholder="Search" />
+                  </th>
+                  <th>
+                    <input type="text" class="filter-input" data-column="refPCC" placeholder="Search" />
+                  </th>
+                  <th>
+                    <input type="text" class="filter-input" data-column="clientName" placeholder="Search" />
+                  </th>
+                  <th>
+                    <select class="filter-select" data-column="division">
+                      <option value="">(All)</option>
+                      <option value="Packaging">Packaging</option>
+                      <option value="Commercial">Commercial</option>
+                    </select>
+                  </th>
+                  <th>
+                    <input type="text" class="filter-input" data-column="prepressPerson" placeholder="Search" />
+                  </th>
+                  <th>
+                    <select class="filter-select" data-column="file">
+                      <option value="">(All)</option>
+                      <option value="Received">Received</option>
+                      <option value="Pending">Pending</option>
+                    </select>
+                  </th>
+                  <th>
+                    <input type="date" class="filter-date" data-column="fileReceivedDate" />
+                  </th>
+                  <th>
+                    <select class="filter-select" data-column="softApprovalReqd">
+                      <option value="">(All)</option>
+                      <option value="Yes">Yes</option>
+                      <option value="No">No</option>
+                    </select>
+                  </th>
+                  <th>
+                    <select class="filter-select" data-column="softApprovalStatus">
+                      <option value="">(All)</option>
+                      <option value="Approved">Approved</option>
+                      <option value="Pending">Pending</option>
+                      <option value="Rejected">Rejected</option>
+                    </select>
+                  </th>
+                  <th>
+                    <input type="date" class="filter-date" data-column="softApprovalSentPlanDate" />
+                  </th>
+                  <th>
+                    <input type="date" class="filter-date" data-column="softApprovalSentActDate" />
+                  </th>
+                  <th>
+                    <input type="text" class="filter-input" data-column="softApprovalLink" placeholder="Search" />
+                  </th>
+                  <th>
+                    <select class="filter-select" data-column="hardApprovalReqd">
+                      <option value="">(All)</option>
+                      <option value="Yes">Yes</option>
+                      <option value="No">No</option>
+                    </select>
+                  </th>
+                  <th>
+                    <select class="filter-select" data-column="hardApprovalStatus">
+                      <option value="">(All)</option>
+                      <option value="Approved">Approved</option>
+                      <option value="Pending">Pending</option>
+                      <option value="Rejected">Rejected</option>
+                    </select>
+                  </th>
+                  <th>
+                    <input type="date" class="filter-date" data-column="hardApprovalSentPlanDate" />
+                  </th>
+                  <th>
+                    <input type="date" class="filter-date" data-column="hardApprovalSentActDate" />
+                  </th>
+                  <th>
+                    <select class="filter-select" data-column="mProofApprovalReqd">
+                      <option value="">(All)</option>
+                      <option value="Yes">Yes</option>
+                      <option value="No">No</option>
+                    </select>
+                  </th>
+                  <th>
+                    <select class="filter-select" data-column="mProofApprovalStatus">
+                      <option value="">(All)</option>
+                      <option value="Approved">Approved</option>
+                      <option value="Pending">Pending</option>
+                      <option value="Rejected">Rejected</option>
+                    </select>
+                  </th>
+                  <th>
+                    <input type="date" class="filter-date" data-column="mProofApprovalSentPlanDate" />
+                  </th>
+                  <th>
+                    <input type="date" class="filter-date" data-column="mProofApprovalSentActDate" />
+                  </th>
+                  <th>
+                    <select class="filter-select" data-column="finallyApproved">
+                      <option value="">(All)</option>
+                      <option value="Yes">Yes</option>
+                      <option value="No">No</option>
+                    </select>
+                  </th>
+                  <th>
+                    <input type="date" class="filter-date" data-column="finallyApprovedDate" />
+                  </th>
+                  <th>
+                    <input type="text" class="filter-input" data-column="artworkRemark" placeholder="Search" />
+                  </th>
+                  <th>
+                    <input type="text" class="filter-input" data-column="toolingPerson" placeholder="Search" />
+                  </th>
+                  <th>
+                    <input type="text" class="filter-input" data-column="toolingDie" placeholder="Search" />
+                  </th>
+                  <th>
+                    <input type="text" class="filter-input" data-column="toolingBlock" placeholder="Search" />
+                  </th>
+                  <th>
+                    <input type="text" class="filter-input" data-column="toolingRemark" placeholder="Search" />
+                  </th>
+                  <th>
+                    <select class="filter-select" data-column="blanket">
+                      <option value="">(All)</option>
+                      <option value="REQUIRED">REQUIRED</option>
+                      <option value="Required">Required</option>
+                      <option value="DONE">DONE</option>
+                      <option value="Done">Done</option>
+                    </select>
+                  </th>
+                  <th>
+                    <input type="date" class="filter-date" data-column="toolingBlanketPlan" />
+                  </th>
+                  <th>
+                    <input type="date" class="filter-date" data-column="toolingBlanketActual" />
+                  </th>
+                  <th>
+                    <input type="text" class="filter-input" data-column="platePerson" placeholder="Search" />
+                  </th>
+                  <th>
+                    <input type="text" class="filter-input" data-column="plateOutput" placeholder="Search" />
+                  </th>
+                  <th>
+                    <input type="date" class="filter-date" data-column="platePlan" />
+                  </th>
+                  <th>
+                    <input type="date" class="filter-date" data-column="plateActual" />
+                  </th>
+                  <th>
+                    <input type="text" class="filter-input" data-column="plateRemark" placeholder="Search" />
+                  </th>
+                </tr>
+              </thead>
+              <tbody id="table-body">
+                <!-- Data rows will be inserted here -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+        
+        <!-- Pagination Controls -->
+        <div id="pagination-container" class="pagination-container" style="display: none; padding: 1rem; border-top: 1px solid var(--border-color); background: var(--bg-secondary);">
+          <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+            <div id="pagination-info" style="color: var(--text-primary); font-size: 0.9rem;">
+              Showing <strong>0</strong> to <strong>0</strong> of <strong>0</strong> entries
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <button id="pagination-prev" class="pagination-btn" disabled style="padding: 0.5rem 1rem; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px; cursor: pointer; font-size: 0.9rem;">
+                Previous
+              </button>
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <span style="color: var(--text-primary); font-size: 0.9rem;">Page</span>
+                <input type="number" id="pagination-page-input" min="1" value="1" style="width: 60px; padding: 0.4rem; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px; text-align: center; font-size: 0.9rem;">
+                <span style="color: var(--text-primary); font-size: 0.9rem;">of <strong id="pagination-total-pages">1</strong></span>
+              </div>
+              <button id="pagination-next" class="pagination-btn" disabled style="padding: 0.5rem 1rem; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px; cursor: pointer; font-size: 0.9rem;">
+                Next
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <div id="empty-state" class="empty-state hidden">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M8 5v14l11-7z"/>
+          </svg>
+          <h3>No Data</h3>
+          <p>No entries found. Click "Add Entry" to create a new entry.</p>
+        </div>
+
+        <!-- Update Actions Bar -->
+        <div class="update-actions" id="update-actions" style="display: none;">
+          <div class="update-summary">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="12" y1="18" x2="12" y2="12"></line>
+              <line x1="9" y1="15" x2="15" y2="15"></line>
+            </svg>
+            <span><strong id="modified-count">0</strong> row(s) have unsaved changes</span>
+          </div>
+          <div class="update-buttons">
+            <button id="btn-cancel-updates" class="btn-secondary">
+              Cancel Changes
+            </button>
+            <button id="btn-save-updates" class="btn-primary" disabled>
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                <polyline points="7 3 7 8 15 8"></polyline>
+              </svg>
+              Update Changes
+            </button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <small>&copy; <span id="year"></span> CDC. All rights reserved.</small>
+    </footer>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="loading-overlay hidden">
+    <div class="spinner"></div>
+    <p>Loading...</p>
+  </div>
+
+  <!-- Add Entry Modal -->
+  <div id="add-entry-modal" class="modal" style="display: none;">
+    <div class="modal-overlay" id="modal-overlay"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Add New Entry</h2>
+        <button class="modal-close" id="modal-close-btn">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form id="add-entry-form">
+          <!-- Top 4 Required Fields -->
+          <div class="form-section">
+            <h3>Basic Information</h3>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="form-division">Division <span class="required">*</span></label>
+                <select id="form-division" name="division" required>
+                  <option value="">Select Division</option>
+                  <option value="AHMEDABAD">AHMEDABAD</option>
+                  <option value="KOLKATA">KOLKATA</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="form-segment">Segment <span class="required">*</span></label>
+                <select id="form-segment" name="segment" required>
+                  <option value="">Select Segment</option>
+                  <option value="Commercial">Commercial</option>
+                  <option value="Packaging">Packaging</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="form-category">Category <span class="required">*</span></label>
+                <input type="text" id="form-category" name="category" required placeholder="e.g., Mono Carton, Label, etc." />
+              </div>
+              <div class="form-group">
+                <label for="form-clientName">Client Name <span class="required">*</span></label>
+                <input type="text" id="form-clientName" name="clientName" required />
+              </div>
+              <div class="form-group">
+                <label for="form-jobName">Job Name <span class="required">*</span></label>
+                <input type="text" id="form-jobName" name="jobName" required />
+              </div>
+            </div>
+          </div>
+
+          <!-- File / Artwork Section -->
+          <div class="form-section">
+            <h3>File & Artwork</h3>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="form-prepressPerson">Prepress Person</label>
+                <select id="form-prepressPerson" name="prepressPerson">
+                  <option value="">Select Person</option>
+                  <!-- Options will be populated dynamically based on division -->
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="form-file">File Status</label>
+                <select id="form-file" name="file">
+                  <option value="">Select Status</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Old">Old</option>
+                  <option value="Received">Received</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="form-fileReceivedDate">File Received Date</label>
+                <input type="date" id="form-fileReceivedDate" name="fileReceivedDate" />
+              </div>
+              <div class="form-group">
+                <label for="form-artworkRemark">Artwork Remark</label>
+                <input type="text" id="form-artworkRemark" name="artworkRemark" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Soft Approval Section -->
+          <div class="form-section">
+            <h3>Soft Approval</h3>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="form-softApprovalReqd">Soft Approval Required</label>
+                <select id="form-softApprovalReqd" name="softApprovalReqd">
+                  <option value="">Select</option>
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="form-softApprovalStatus">Soft Approval Status</label>
+                <select id="form-softApprovalStatus" name="softApprovalStatus">
+                  <option value="">Select Status</option>
+                  <option value="Approved">Approved</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Rejected">Rejected</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="form-softApprovalLink">Link of Soft Approval File</label>
+                <input type="text" id="form-softApprovalLink" name="softApprovalLink" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Hard Approval Section -->
+          <div class="form-section">
+            <h3>Hard Approval</h3>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="form-hardApprovalReqd">Hard Approval Required</label>
+                <select id="form-hardApprovalReqd" name="hardApprovalReqd">
+                  <option value="">Select</option>
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="form-hardApprovalStatus">Hard Approval Status</label>
+                <select id="form-hardApprovalStatus" name="hardApprovalStatus">
+                  <option value="">Select Status</option>
+                  <option value="Approved">Approved</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Rejected">Rejected</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Machine Proof Approval Section -->
+          <div class="form-section">
+            <h3>Machine Proof Approval</h3>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="form-mProofApprovalReqd">Machine Proof Required</label>
+                <select id="form-mProofApprovalReqd" name="mProofApprovalReqd">
+                  <option value="">Select</option>
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="form-mProofApprovalStatus">Machine Proof Status</label>
+                <select id="form-mProofApprovalStatus" name="mProofApprovalStatus">
+                  <option value="">Select Status</option>
+                  <option value="Approved">Approved</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Rejected">Rejected</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tooling Section -->
+          <div class="form-section">
+            <h3>Tooling</h3>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="form-toolingPerson">Tooling Person</label>
+                <select id="form-toolingPerson" name="toolingPerson">
+                  <option value="">Select Person</option>
+                  <!-- Options will be populated dynamically based on division -->
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="form-toolingDie">Tooling Die</label>
+                <input type="text" id="form-toolingDie" name="toolingDie" />
+              </div>
+              <div class="form-group">
+                <label for="form-toolingBlock">Tooling Block</label>
+                <input type="text" id="form-toolingBlock" name="toolingBlock" />
+              </div>
+              <div class="form-group">
+                <label for="form-blanket">Blanket</label>
+                <select id="form-blanket" name="blanket">
+                  <option value="">Select</option>
+                  <option value="REQUIRED">REQUIRED</option>
+                  <option value="Required">Required</option>
+                  <option value="DONE">DONE</option>
+                  <option value="Done">Done</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="form-toolingRemark">Tooling Remark</label>
+                <input type="text" id="form-toolingRemark" name="toolingRemark" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Plate Section -->
+          <div class="form-section">
+            <h3>Plate</h3>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="form-platePerson">Plate Person</label>
+                <select id="form-platePerson" name="platePerson">
+                  <option value="">Select Person</option>
+                  <!-- Options will be populated dynamically based on division -->
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="form-plateOutput">Plate Output</label>
+                <select id="form-plateOutput" name="plateOutput">
+                  <option value="">Select Status</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Done">Done</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="form-plateRemark">Plate Remark</label>
+                <input type="text" id="form-plateRemark" name="plateRemark" />
+              </div>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="button" class="btn-secondary" id="form-cancel-btn">Cancel</button>
+            <button type="submit" class="btn-primary">Add Entry</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- User Wise Pending Modal -->
+  <div id="user-wise-pending-modal" class="modal" style="display: none;">
+    <div class="modal-overlay" id="user-wise-modal-overlay"></div>
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2>User Wise Pending</h2>
+        <button class="modal-close" id="user-wise-modal-close-btn">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="form-section">
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="user-wise-select">Select User <span class="required">*</span></label>
+              <select id="user-wise-select" name="user" required>
+                <option value="">Loading users...</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="form-actions" style="margin-top: 2rem;">
+          <button type="button" class="btn-secondary" id="user-wise-cancel-btn">Cancel</button>
+          <button type="button" class="btn-primary" id="user-wise-get-btn" disabled>Get</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- User Wise Pending Results Modal -->
+  <div id="user-wise-results-modal" class="modal" style="display: none;">
+    <div class="modal-overlay" id="user-wise-results-modal-overlay"></div>
+    <div class="modal-content" style="max-width: 95%; max-height: 90vh; width: 1400px;">
+      <div class="modal-header">
+        <h2 id="user-wise-results-title">User Wise Pending - <span id="user-wise-results-username"></span></h2>
+        <button class="modal-close" id="user-wise-results-modal-close-btn">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body" style="display: flex; flex-direction: column; overflow: hidden; max-height: calc(90vh - 100px);">
+        <!-- Source Filter Section -->
+        <div id="user-wise-source-filter-section" class="source-filter-section" style="display: none; padding: 0.75rem 1rem; margin-bottom: 0.5rem;">
+          <div class="source-filter-container" style="justify-content: flex-start;">
+            <label class="source-filter-label">Filter by Source:</label>
+            <div class="source-filter-options">
+              <label class="source-filter-option">
+                <input type="checkbox" id="user-wise-filter-kolkata" data-source="KOLKATA" checked />
+                <span>Kolkata</span>
+              </label>
+              <label class="source-filter-option">
+                <input type="checkbox" id="user-wise-filter-ahmedabad" data-source="AHMEDABAD" checked />
+                <span>Ahmedabad</span>
+              </label>
+              <label class="source-filter-option">
+                <input type="checkbox" id="user-wise-filter-unordered" data-source="UNORDERED" checked />
+                <span>Unordered</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div id="user-wise-results-loading" class="loading-state" style="text-align: center; padding: 2rem; display: none;">
+          <p>Loading pending data...</p>
+        </div>
+        <div id="user-wise-results-filtering" class="loading-state" style="text-align: center; padding: 1rem; display: none; font-size: 0.9rem;">
+          <p>Filtering data...</p>
+        </div>
+        <div id="user-wise-results-empty" class="empty-state" style="display: none; text-align: center; padding: 3rem;">
+          <p>No pending data found for this user.</p>
+        </div>
+        <div id="user-wise-results-table-container" style="display: none; flex: 1; overflow: auto; position: relative; min-height: 0;">
+            <div class="table-wrapper">
+              <table id="user-wise-results-table" class="prepress-table" style="min-width: 1200px;">
+                <thead>
+                  <tr class="table-header-row">
+                    <th style="width: 50px;">
+                      Select<br>
+                      <input type="checkbox" id="user-wise-select-all" title="Select All" style="margin-top: 4px;">
+                    </th>
+                    <th>PO Number</th>
+                    <th>PO Date</th>
+                    <th>Jobcard Number</th>
+                    <th>Client Name</th>
+                    <th>Ref MIS Code</th>
+                    <th>Job Name</th>
+                    <th>Division</th>
+                    <th>File Received Date</th>
+                    <th>Operation</th>
+                    <th>Remarks</th>
+                    <th>Link</th>
+                    <th>Plan Date</th>
+                  </tr>
+                </thead>
+                <tbody id="user-wise-results-table-body">
+                  <!-- Data rows will be inserted here -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        <div id="user-wise-results-actions" style="display: none; padding: 1rem 2rem; border-top: 1px solid var(--border-color); background: var(--bg-secondary); flex-shrink: 0;">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 1rem;">
+              <span id="user-wise-selected-count" style="color: var(--text-primary); font-size: 0.9rem;">
+                <strong>0</strong> item(s) selected
+              </span>
+              <button type="button" class="btn-secondary" id="user-wise-unselect-all-btn" style="display: none;">
+                Unselect All
+              </button>
+            </div>
+            <button type="button" class="btn-primary" id="user-wise-update-btn">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              Update
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- User Wise Update Modal -->
+  <!-- COMMENTED OUT: Now using inline editable cells for Remarks and Link columns -->
+  <!--
+  <div id="user-wise-update-modal" class="modal" style="display: none;">
+    <div class="modal-overlay" id="user-wise-update-modal-overlay"></div>
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2 id="user-wise-update-title">Update Selected Items</h2>
+        <button type="button" class="modal-close-btn" id="user-wise-update-modal-close-btn" aria-label="Close">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div style="margin-bottom: 1.5rem;">
+          <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1rem;">
+            Update <strong id="user-wise-update-count">0</strong> selected item(s)
+          </p>
+        </div>
+        
+        <form id="user-wise-update-form">
+          <div class="form-group">
+            <label for="update-remark" class="form-label">
+              Remark <span style="color: var(--text-secondary); font-weight: normal;">(optional)</span>
+            </label>
+            <input 
+              type="text" 
+              id="update-remark" 
+              name="remark" 
+              class="form-input" 
+              placeholder="e.g., Shared via Drive"
+              value="Shared via Drive"
+            >
+          </div>
+          
+          <div class="form-group">
+            <label for="update-link" class="form-label">
+              Link <span style="color: var(--text-secondary); font-weight: normal;">(optional)</span>
+            </label>
+            <input 
+              type="url" 
+              id="update-link" 
+              name="link" 
+              class="form-input" 
+              placeholder="https://drive.example.com/file/abc"
+            >
+          </div>
+          
+          <div class="form-actions" style="margin-top: 2rem; display: flex; gap: 1rem; justify-content: flex-end;">
+            <button type="button" class="btn-secondary" id="user-wise-update-cancel-btn">
+              Cancel
+            </button>
+            <button type="submit" class="btn-primary" id="user-wise-update-submit-btn">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              Update Items
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  -->
+
+  <script src="script.js" defer></script>
+</body>
+</html>
