@@ -781,15 +781,25 @@
       return v === 'yes' || v === 'true' || v === '1';
     };
 
+    // For MongoDB unordered entries, use specific field mappings
+    const isMongoUnordered = row.__SourceDB === 'MONGO_UNORDERED';
+    
     return {
       // Basic job/order info
-      soDate: row.SODate || row.SoDate || row.soDate || null,
+      // For MongoDB: SO Date -> createdAt, SO No -> tokenNumber, Ref P.C.C -> reference
+      soDate: isMongoUnordered 
+        ? (row.SODate || null)  // MongoDB: use SODate which comes from createdAt
+        : (row.SODate || row.SoDate || row.soDate || null),
       poDate: row.PODate || row.PoDate || row.poDate || null,
-      soNo: row.SONO || row.SONo || row.SoNo || row.soNo || '',
+      soNo: isMongoUnordered
+        ? (row.SONO || '')  // MongoDB: use SONO which comes from tokenNumber (UN-XXXXX)
+        : (row.SONO || row.SONo || row.SoNo || row.soNo || ''),
       pwoNo: row.PWONO || row.PWONo || row.PwoNo || row.pwoNo || '',
       pwoDate: row.PWODate || row.PwoDate || row.pwoDate || null,
       jobName: row.JobName || row.jobName || '',
-      refPCC: row.RefProductMasterCode || row.RefPCC || row.RefNo || row.RefPCCNo || '',
+      refPCC: isMongoUnordered
+        ? (row.RefPCC || '')  // MongoDB: use RefPCC which comes from reference
+        : (row.RefProductMasterCode || row.RefPCC || row.RefNo || row.RefPCCNo || ''),
       clientName: row.ClientName || row.clientName || '',
 
       // Division / site
@@ -2203,8 +2213,8 @@ if (!entry) {
     }
 
     // Validate required fields
-    if (!formValues.division || !formValues.segment || !formValues.category || !formValues.clientName || !formValues.jobName) {
-      alert('Please fill in all required fields: Division, Segment, Category, Client Name, and Job Name');
+    if (!formValues.division || !formValues.segment || !formValues.category || !formValues.clientName || !formValues.jobName || !formValues.reference) {
+      alert('Please fill in all required fields: Division, Segment, Category, Client Name, Job Name, and Reference');
       return;
     }
 
@@ -2219,9 +2229,10 @@ if (!entry) {
         jobName: formValues.jobName,
         category: formValues.category, // Category (e.g., Mono Carton, Label, etc.)
         segment: formValues.segment, // Segment (Commercial or Packaging)
+        reference: formValues.reference, // Reference field (mandatory)
         userKey: (() => {
           // Convert displayName to userKey for prepressPerson
-          if (!formValues.prepressPerson) return 'biswajit';
+          if (!formValues.prepressPerson) return null;
           
           // Find user by displayName
           const site = formValues.division?.toUpperCase() === 'AHMEDABAD' ? 'AHMEDABAD' : 'KOLKATA';
@@ -2281,8 +2292,9 @@ if (!entry) {
         throw new Error(result.error || 'Failed to add entry');
       }
 
-      // Success!
-      alert(`✅ Entry added successfully!`);
+      // Success! Show popup with token number
+      const tokenNumber = result.tokenNumber || 'UN-XXXXX';
+      alert(`✅ Approval record has been created, reference number ${tokenNumber}`);
       closeAddEntryModal();
       
       // Refresh the table to show the new entry
