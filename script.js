@@ -26,6 +26,7 @@
     users: [], // All users from MongoDB
     usersBySite: { KOLKATA: [], AHMEDABAD: [] }, // Users grouped by site
     sourceFilters: ['KOLKATA', 'AHMEDABAD', 'UNORDERED'], // Default: show all sources
+    quickFilterPreset: '', // Additional quick filter for main pending grid
     pagination: {
       currentPage: 1,
       pageSize: 300,
@@ -82,6 +83,7 @@
     paginationPrev: document.getElementById('pagination-prev'),
     paginationNext: document.getElementById('pagination-next'),
     paginationPageInput: document.getElementById('pagination-page-input'),
+    quickFilterPreset: document.getElementById('quick-filter-preset'),
     // COMMENTED OUT: Modal elements no longer used (inline editing instead)
     // userWiseUpdateModal: document.getElementById('user-wise-update-modal'),
     // userWiseUpdateModalOverlay: document.getElementById('user-wise-update-modal-overlay'),
@@ -1052,7 +1054,54 @@
         return false;
       }
 
-      // No frontend filtering for pending/completed - backend handles this via separate endpoints
+      // Apply quick preset filters (on top of source filter)
+      if (state.quickFilterPreset) {
+        const preset = state.quickFilterPreset;
+        const prepress = (entry.prepressPerson || '').toString().trim();
+        const fileStatus = (entry.file || '').toString().trim().toLowerCase();
+        const softReq = (entry.softApprovalReqd || '').toString().trim().toLowerCase();
+        const softStatus = (entry.softApprovalStatus || '').toString().trim().toLowerCase();
+        const hardReq = (entry.hardApprovalReqd || '').toString().trim().toLowerCase();
+        const hardStatus = (entry.hardApprovalStatus || '').toString().trim().toLowerCase();
+        const plateOutput = (entry.plateOutput || '').toString().trim().toLowerCase();
+
+        if (preset === 'no-prepress') {
+          // 1. Prepress person not assigned -> null / '' / blank
+          if (prepress !== '') {
+            return false;
+          }
+        } else if (preset === 'pending-file') {
+          // 2. Pending File -> file column is 'Pending'
+          if (fileStatus !== 'pending') {
+            return false;
+          }
+        } else if (preset === 'pending-soft-send') {
+          // 3. Pending Softcopy Send -> soft required yes and status pending
+          if (!(softReq === 'yes' && softStatus === 'pending')) {
+            return false;
+          }
+        } else if (preset === 'pending-soft-approval') {
+          // 4. Pending Softcopy Approval -> soft required yes and status sent
+          if (!(softReq === 'yes' && softStatus === 'sent')) {
+            return false;
+          }
+        } else if (preset === 'pending-hard-approval') {
+          // 5. Pending Hardcopy Approval -> hard required yes and status sent
+          if (!(hardReq === 'yes' && hardStatus === 'sent')) {
+            return false;
+          }
+        } else if (preset === 'pending-hard-send') {
+          // 6. Pending Hardcopy Send -> hard required yes and status pending
+          if (!(hardReq === 'yes' && hardStatus === 'pending')) {
+            return false;
+          }
+        } else if (preset === 'pending-plates') {
+          // 7. Pending Plates -> plate output is 'Pending'
+          if (plateOutput !== 'pending') {
+            return false;
+          }
+        }
+      }
 
       // Apply column filters
       for (const [key, value] of Object.entries(state.filters)) {
@@ -1571,6 +1620,15 @@
         });
       }
     });
+
+    // Quick preset filter for common pending conditions
+    if (elements.quickFilterPreset) {
+      elements.quickFilterPreset.addEventListener('change', (e) => {
+        const value = e.target.value || '';
+        state.quickFilterPreset = value;
+        applyFilters(true);
+      });
+    }
   }
 
   // Initialize
