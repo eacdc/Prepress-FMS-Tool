@@ -411,7 +411,6 @@
         { key: 'toolingDie', label: 'Tooling Die' },
         { key: 'toolingBlock', label: 'Tooling Block' },
         { key: 'toolingPerson', label: 'Tooling Person' },
-        { key: 'toolingRemark', label: 'Tooling Remark' },
         { key: 'blanket', label: 'Blanket' },
         { key: 'platePerson', label: 'Plate Person' },
         { key: 'plateOutput', label: 'Plate Output' },
@@ -420,12 +419,15 @@
       const validationErrors = [];
 
       // state.pendingUpdates: Map<rowId, { entry, updates }>
-      Array.from(state.pendingUpdates.values()).forEach(({ entry }) => {
+      // Use both the original entry and the pending updates for validation
+      Array.from(state.pendingUpdates.values()).forEach(({ entry, updates }) => {
         if (!entry) return;
 
         const missingLabels = [];
         requiredFieldDefs.forEach(({ key, label }) => {
-          const rawVal = entry[key];
+          // Prefer the pending updated value if present; otherwise fall back to the entry's current value
+          const hasUpdate = updates && Object.prototype.hasOwnProperty.call(updates, key);
+          const rawVal = hasUpdate ? updates[key] : entry[key];
           const val =
             rawVal === null || rawVal === undefined
               ? ''
@@ -1362,7 +1364,7 @@
           <option value="" ${statusValue === '' ? 'selected' : ''}></option>
           <option value="Approved" ${statusValue === 'Approved' ? 'selected' : ''}>Approved</option>
           <option value="Pending" ${statusValue === 'Pending' ? 'selected' : ''}>Pending</option>
-          <option value="Rejected" ${statusValue === 'Rejected' ? 'selected' : ''}>Rejected</option>
+          <option value="Redo" ${statusValue === 'Redo' ? 'selected' : ''}>Redo</option>
         `;
 
       case 'toolingDie':
@@ -1779,8 +1781,9 @@
       
       // Handle click on dropdown text cells to convert to dropdown
       elements.tableBody.addEventListener('click', (e) => {
-        const target = e.target;
-        if (target.classList.contains('cell-text-editable') && !target.classList.contains('editing')) {
+        // Make the entire visible cell clickable, including inner placeholder spans
+        const target = e.target.closest('.cell-text-editable');
+        if (target && !target.classList.contains('editing')) {
           e.preventDefault();
           e.stopPropagation();
           
