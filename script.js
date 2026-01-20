@@ -786,15 +786,17 @@
     
     return {
       // Basic job/order info
-      // For MongoDB: SO Date -> createdAt, SO No -> tokenNumber, Ref P.C.C -> reference
+      // For MongoDB: SO Date -> createdAt, PWO No -> tokenNumber, Ref P.C.C -> reference
       soDate: isMongoUnordered 
         ? (row.SODate || null)  // MongoDB: use SODate which comes from createdAt
         : (row.SODate || row.SoDate || row.soDate || null),
       poDate: row.PODate || row.PoDate || row.poDate || null,
       soNo: isMongoUnordered
-        ? (row.SONO || '')  // MongoDB: use SONO which comes from tokenNumber (UN-XXXXX)
+        ? ''  // MongoDB: SO No is empty (tokenNumber goes to PWO No instead)
         : (row.SONO || row.SONo || row.SoNo || row.soNo || ''),
-      pwoNo: row.PWONO || row.PWONo || row.PwoNo || row.pwoNo || '',
+      pwoNo: isMongoUnordered
+        ? (row.PWONO || '')  // MongoDB: use PWONO which comes from tokenNumber (UN-XXXXX)
+        : (row.PWONO || row.PWONo || row.PwoNo || row.pwoNo || ''),
       pwoDate: row.PWODate || row.PwoDate || row.pwoDate || null,
       jobName: row.JobName || row.jobName || '',
       refPCC: isMongoUnordered
