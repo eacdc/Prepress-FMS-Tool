@@ -401,6 +401,62 @@
       return;
     }
 
+    // Frontend validation: in main pending view, certain columns must not be blank
+    if (state.currentView === 'pending') {
+      const requiredFieldDefs = [
+        { key: 'file', label: 'File' },
+        { key: 'softApprovalReqd', label: 'Soft Approval Reqd' },
+        { key: 'hardApprovalReqd', label: 'Hard Approval Reqd' },
+        { key: 'mProofApprovalReqd', label: 'MProof Approval Reqd' },
+        { key: 'toolingDie', label: 'Tooling Die' },
+        { key: 'toolingBlock', label: 'Tooling Block' },
+        { key: 'toolingPerson', label: 'Tooling Person' },
+        { key: 'toolingRemark', label: 'Tooling Remark' },
+        { key: 'blanket', label: 'Blanket' },
+        { key: 'platePerson', label: 'Plate Person' },
+        { key: 'plateOutput', label: 'Plate Output' },
+      ];
+
+      const validationErrors = [];
+
+      // state.pendingUpdates: Map<rowId, { entry, updates }>
+      Array.from(state.pendingUpdates.values()).forEach(({ entry }) => {
+        if (!entry) return;
+
+        const missingLabels = [];
+        requiredFieldDefs.forEach(({ key, label }) => {
+          const rawVal = entry[key];
+          const val =
+            rawVal === null || rawVal === undefined
+              ? ''
+              : String(rawVal).trim();
+          if (!val) {
+            missingLabels.push(label);
+          }
+        });
+
+        if (missingLabels.length > 0) {
+          const rowLabel =
+            entry.soNo ||
+            entry.pwoNo ||
+            entry.jobName ||
+            entry.clientName ||
+            'Unknown row';
+          validationErrors.push(
+            `${rowLabel}: ${missingLabels.join(', ')}`
+          );
+        }
+      });
+
+      if (validationErrors.length > 0) {
+        alert(
+          'Please fill the following fields before updating:\n\n' +
+            validationErrors.join('\n')
+        );
+        return;
+      }
+    }
+
     // console.log('📦 [SAVE] Updates to save:', Array.from(state.pendingUpdates.entries()));
 
     showLoading();
@@ -1031,13 +1087,13 @@
       for (const sourceFilter of state.sourceFilters) {
         if (sourceFilter === 'KOLKATA') {
           // Kolkata entries: __SourceDB === 'KOL_SQL' OR site === 'KOLKATA'
-          if (sourceDb === 'KOL_SQL' || site.toUpperCase() === 'KOLKATA') {
+          if (sourceDb === 'KOL_SQL') {
             matchesSource = true;
             break;
           }
         } else if (sourceFilter === 'AHMEDABAD') {
           // Ahmedabad entries: __SourceDB === 'AMD_SQL' OR site === 'AHMEDABAD'
-          if (sourceDb === 'AMD_SQL' || site.toUpperCase() === 'AHMEDABAD') {
+          if (sourceDb === 'AMD_SQL') {
             matchesSource = true;
             break;
           }
@@ -1071,8 +1127,8 @@
             return false;
           }
         } else if (preset === 'pending-file') {
-          // 2. Pending File -> file column is 'Pending'
-          if (fileStatus !== 'pending') {
+          // 2. Pending File -> file column is 'Pending' OR blank (null/empty treated as pending)
+          if (fileStatus && fileStatus !== 'pending') {
             return false;
           }
         } else if (preset === 'pending-soft-send') {
@@ -1096,8 +1152,8 @@
             return false;
           }
         } else if (preset === 'pending-plates') {
-          // 7. Pending Plates -> plate output is 'Pending'
-          if (plateOutput !== 'pending') {
+          // 7. Pending Plates -> plate output is 'Pending' OR blank (null/empty treated as pending)
+          if (plateOutput && plateOutput !== 'pending') {
             return false;
           }
         }
@@ -1309,13 +1365,18 @@
           <option value="Rejected" ${statusValue === 'Rejected' ? 'selected' : ''}>Rejected</option>
         `;
 
+      case 'toolingDie':
+      case 'toolingBlock':
       case 'blanket':
+        // Normalized current value for comparison
+        const normVal = (currentValue || '').toString().trim();
         return `
           <option value=""></option>
-          <option value="REQUIRED" ${currentValue === 'REQUIRED' ? 'selected' : ''}>REQUIRED</option>
-          <option value="Required" ${currentValue === 'Required' ? 'selected' : ''}>Required</option>
-          <option value="DONE" ${currentValue === 'DONE' ? 'selected' : ''}>DONE</option>
-          <option value="Done" ${currentValue === 'Done' ? 'selected' : ''}>Done</option>
+          <option value="NA" ${normVal === 'NA' ? 'selected' : ''}>NA</option>
+          <option value="Old" ${normVal === 'Old' ? 'selected' : ''}>Old</option>
+          <option value="Ordered" ${normVal === 'Ordered' ? 'selected' : ''}>Ordered</option>
+          <option value="Required" ${normVal === 'Required' ? 'selected' : ''}>Required</option>
+          <option value="Received" ${normVal === 'Received' ? 'selected' : ''}>Received</option>
         `;
 
       case 'plateOutput':
@@ -1496,8 +1557,16 @@
             ${getDropdownDisplayText('toolingPerson', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
           </span>
         </td>
-        <td><input class="cell-input editable" data-field="toolingDie" data-col-index="30" value="${(entry.toolingDie || '').replace(/"/g, '&quot;')}" /></td>
-        <td><input class="cell-input editable" data-field="toolingBlock" data-col-index="31" value="${(entry.toolingBlock || '').replace(/"/g, '&quot;')}" /></td>
+        <td>
+          <span class="cell-text-editable editable" data-field="toolingDie" data-col-index="30" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
+            ${getDropdownDisplayText('toolingDie', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
+          </span>
+        </td>
+        <td>
+          <span class="cell-text-editable editable" data-field="toolingBlock" data-col-index="31" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
+            ${getDropdownDisplayText('toolingBlock', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
+          </span>
+        </td>
         <td><input class="cell-input editable" data-field="toolingRemark" data-col-index="32" value="${(entry.toolingRemark || '').replace(/"/g, '&quot;')}" /></td>
         <td>
           <span class="cell-text-editable editable" data-field="blanket" data-col-index="33" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
