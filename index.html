@@ -83,6 +83,7 @@
                   <th>PWO No</th>
                   <th>PWO Date</th>
                   <th>Job Name</th>
+                  <th>Executive</th>
                   <th>Ref P.C.C...</th>
                   <th>Client Name</th>
                   <th>Division</th>
@@ -136,6 +137,9 @@
                   </th>
                   <th>
                     <input type="text" class="filter-input" data-column="jobName" placeholder="Search" />
+                  </th>
+                  <th>
+                    <input type="text" class="filter-input" data-column="executive" placeholder="Search" />
                   </th>
                   <th>
                     <input type="text" class="filter-input" data-column="refPCC" placeholder="Search" />
@@ -413,6 +417,31 @@
                 <label for="form-reference">Reference <span class="required">*</span></label>
                 <input type="text" id="form-reference" name="reference" required placeholder="Enter reference" />
               </div>
+              <div class="form-group">
+                <label for="form-executive">Executive <span class="required">*</span></label>
+                <select id="form-executive" name="executive" required>
+                  <option value="">Select Executive</option>
+                  <option value="Amartya Dasgupta">Amartya Dasgupta</option>
+                  <option value="Amit Kumar Mittal">Amit Kumar Mittal</option>
+                  <option value="Basabjit">Basabjit</option>
+                  <option value="Chandan Ray">Chandan Ray</option>
+                  <option value="Kaushik Bargi">Kaushik Bargi</option>
+                  <option value="Krishna Singh">Krishna Singh</option>
+                  <option value="Lohit Mahato">Lohit Mahato</option>
+                  <option value="Manu Choudhary">Manu Choudhary</option>
+                  <option value="Niladri Mondal">Niladri Mondal</option>
+                  <option value="Partha Moulik">Partha Moulik</option>
+                  <option value="Pintu Ghosh">Pintu Ghosh</option>
+                  <option value="Prakash Show">Prakash Show</option>
+                  <option value="Rajushaw">Rajushaw</option>
+                  <option value="Ranajit Dhar">Ranajit Dhar</option>
+                  <option value="Sameer Arora">Sameer Arora</option>
+                  <option value="Sanjay Biswas">Sanjay Biswas</option>
+                  <option value="Shib Shankar Sarkar">Shib Shankar Sarkar</option>
+                  <option value="Shyam Jaiswara">Shyam Jaiswara</option>
+                  <option value="Tanmoy Basu">Tanmoy Basu</option>
+                </select>
+              </div>
             </div>
           </div>
 
@@ -681,6 +710,7 @@
                     <th>PO Number</th>
                     <th>PO Date</th>
                     <th>Jobcard Number</th>
+                    <th>Executive</th>
                     <th>Client Name</th>
                     <th>Ref MIS Code</th>
                     <th>Job Name</th>

@@ -799,6 +799,9 @@
         : (row.PWONO || row.PWONo || row.PwoNo || row.pwoNo || ''),
       pwoDate: row.PWODate || row.PwoDate || row.pwoDate || null,
       jobName: row.JobName || row.jobName || '',
+      executive: isMongoUnordered
+        ? (row.Executive || row.executive || '')  // MongoDB: use executive field
+        : (row.ledgername || row.LedgerName || row.ledgerName || row.Executive || row.executive || ''),  // SQL: use ledgername from stored procedure (column is lowercase)
       refPCC: isMongoUnordered
         ? (row.RefPCC || '')  // MongoDB: use RefPCC which comes from reference
         : (row.RefProductMasterCode || row.RefPCC || row.RefNo || row.RefPCCNo || ''),
@@ -1100,25 +1103,26 @@
   }
 
   // Column mapping: index -> field name (for editable fields)
+  // Note: Executive column added at index 6, so all indices after it shifted by +1
   const COLUMN_FIELD_MAP = {
-    9: 'prepressPerson',      // Prepress Person
-    10: 'file',               // File
-    11: 'fileReceivedDate',   // File Received Date
-    12: 'softApprovalReqd',   // Soft Approval Reqd
-    13: 'softApprovalStatus', // Soft Approval Status
-    16: 'softApprovalLink',   // Link of Soft Approval file
-    17: 'hardApprovalReqd',   // Hard Approval Reqd
-    18: 'hardApprovalStatus', // Hard Approval Status
-    21: 'mProofApprovalReqd', // MProof Approval Reqd
-    22: 'mProofApprovalStatus', // MProof Approval Status
-    27: 'artworkRemark',      // Artwork Remark
-    28: 'toolingPerson',      // Tooling Person
-    29: 'toolingDie',         // Tooling Die
-    30: 'toolingBlock',       // Tooling Block
-    31: 'toolingRemark',     // Tooling Remark
-    32: 'blanket',            // Blanket
-    34: 'platePerson',        // Plate Person
-    35: 'plateOutput',        // Plate Output
+    10: 'prepressPerson',      // Prepress Person (was 9)
+    11: 'file',               // File (was 10)
+    12: 'fileReceivedDate',   // File Received Date (was 11)
+    13: 'softApprovalReqd',   // Soft Approval Reqd (was 12)
+    14: 'softApprovalStatus', // Soft Approval Status (was 13)
+    17: 'softApprovalLink',   // Link of Soft Approval file (was 16)
+    18: 'hardApprovalReqd',   // Hard Approval Reqd (was 17)
+    19: 'hardApprovalStatus', // Hard Approval Status (was 18)
+    22: 'mProofApprovalReqd', // MProof Approval Reqd (was 21)
+    23: 'mProofApprovalStatus', // MProof Approval Status (was 22)
+    28: 'artworkRemark',      // Artwork Remark (was 27)
+    29: 'toolingPerson',      // Tooling Person (was 28)
+    30: 'toolingDie',         // Tooling Die (was 29)
+    31: 'toolingBlock',       // Tooling Block (was 30)
+    32: 'toolingRemark',     // Tooling Remark (was 31)
+    33: 'blanket',            // Blanket (was 32)
+    35: 'platePerson',        // Plate Person (was 34)
+    36: 'plateOutput',        // Plate Output (was 35)
   };
 
   // Get entry value by column key
@@ -1383,52 +1387,53 @@
         <td>${entry.pwoNo || ''}</td>
         <td>${pwoDateFmt}</td>
         <td>${entry.jobName || ''}</td>
+        <td>${entry.executive || ''}</td>
         <td>${entry.refPCC || ''}</td>
         <td>${entry.clientName || ''}</td>
         <td>${entry.division || ''}</td>
         <td>
-          <span class="cell-text-editable editable" data-field="prepressPerson" data-col-index="9" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
+          <span class="cell-text-editable editable" data-field="prepressPerson" data-col-index="10" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
             ${getDropdownDisplayText('prepressPerson', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
           </span>
         </td>
         <td>
-          <span class="cell-text-editable editable" data-field="file" data-col-index="10" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
+          <span class="cell-text-editable editable" data-field="file" data-col-index="11" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
             ${getDropdownDisplayText('file', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
           </span>
         </td>
-        <td><input type="date" class="cell-input editable" data-field="fileReceivedDate" data-col-index="11" value="${fileReceivedDateFmt}" /></td>
+        <td><input type="date" class="cell-input editable" data-field="fileReceivedDate" data-col-index="12" value="${fileReceivedDateFmt}" /></td>
         <td>
-          <span class="cell-text-editable editable" data-field="softApprovalReqd" data-col-index="12" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
+          <span class="cell-text-editable editable" data-field="softApprovalReqd" data-col-index="13" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
             ${getDropdownDisplayText('softApprovalReqd', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
           </span>
         </td>
         <td>
-          <span class="cell-text-editable editable" data-field="softApprovalStatus" data-col-index="13" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
+          <span class="cell-text-editable editable" data-field="softApprovalStatus" data-col-index="14" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
             ${getDropdownDisplayText('softApprovalStatus', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
           </span>
         </td>
         <td>${softApprovalSentPlanDateFmt}</td>
         <td>${softApprovalSentActDateFmt}</td>
-        <td><input class="cell-input editable" data-field="softApprovalLink" data-col-index="16" value="${(entry.softApprovalLink || '').replace(/"/g, '&quot;')}" /></td>
+        <td><input class="cell-input editable" data-field="softApprovalLink" data-col-index="17" value="${(entry.softApprovalLink || '').replace(/"/g, '&quot;')}" /></td>
         <td>
-          <span class="cell-text-editable editable" data-field="hardApprovalReqd" data-col-index="17" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
+          <span class="cell-text-editable editable" data-field="hardApprovalReqd" data-col-index="18" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
             ${getDropdownDisplayText('hardApprovalReqd', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
           </span>
         </td>
         <td>
-          <span class="cell-text-editable editable" data-field="hardApprovalStatus" data-col-index="18" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
+          <span class="cell-text-editable editable" data-field="hardApprovalStatus" data-col-index="19" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
             ${getDropdownDisplayText('hardApprovalStatus', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
           </span>
         </td>
         <td>${hardApprovalSentPlanDateFmt}</td>
         <td>${hardApprovalSentActDateFmt}</td>
         <td>
-          <span class="cell-text-editable editable" data-field="mProofApprovalReqd" data-col-index="21" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
+          <span class="cell-text-editable editable" data-field="mProofApprovalReqd" data-col-index="22" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
             ${getDropdownDisplayText('mProofApprovalReqd', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
           </span>
         </td>
         <td>
-          <span class="cell-text-editable editable" data-field="mProofApprovalStatus" data-col-index="22" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
+          <span class="cell-text-editable editable" data-field="mProofApprovalStatus" data-col-index="23" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
             ${getDropdownDisplayText('mProofApprovalStatus', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
           </span>
         </td>
@@ -1436,29 +1441,29 @@
         <td>${mProofApprovalSentActDateFmt}</td>
         <td>${finallyApprovedFmt}</td>
         <td>${finallyApprovedDateFmt}</td>
-        <td><input class="cell-input editable" data-field="artworkRemark" data-col-index="27" value="${(entry.artworkRemark || '').replace(/"/g, '&quot;')}" /></td>
+        <td><input class="cell-input editable" data-field="artworkRemark" data-col-index="28" value="${(entry.artworkRemark || '').replace(/"/g, '&quot;')}" /></td>
         <td>
-          <span class="cell-text-editable editable" data-field="toolingPerson" data-col-index="28" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
+          <span class="cell-text-editable editable" data-field="toolingPerson" data-col-index="29" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
             ${getDropdownDisplayText('toolingPerson', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
           </span>
         </td>
-        <td><input class="cell-input editable" data-field="toolingDie" data-col-index="29" value="${(entry.toolingDie || '').replace(/"/g, '&quot;')}" /></td>
-        <td><input class="cell-input editable" data-field="toolingBlock" data-col-index="30" value="${(entry.toolingBlock || '').replace(/"/g, '&quot;')}" /></td>
-        <td><input class="cell-input editable" data-field="toolingRemark" data-col-index="31" value="${(entry.toolingRemark || '').replace(/"/g, '&quot;')}" /></td>
+        <td><input class="cell-input editable" data-field="toolingDie" data-col-index="30" value="${(entry.toolingDie || '').replace(/"/g, '&quot;')}" /></td>
+        <td><input class="cell-input editable" data-field="toolingBlock" data-col-index="31" value="${(entry.toolingBlock || '').replace(/"/g, '&quot;')}" /></td>
+        <td><input class="cell-input editable" data-field="toolingRemark" data-col-index="32" value="${(entry.toolingRemark || '').replace(/"/g, '&quot;')}" /></td>
         <td>
-          <span class="cell-text-editable editable" data-field="blanket" data-col-index="32" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
+          <span class="cell-text-editable editable" data-field="blanket" data-col-index="33" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
             ${getDropdownDisplayText('blanket', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
           </span>
         </td>
         <td>${toolingBlanketPlanFmt}</td>
         <td>${toolingBlanketActualFmt}</td>
         <td>
-          <span class="cell-text-editable editable" data-field="platePerson" data-col-index="34" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
+          <span class="cell-text-editable editable" data-field="platePerson" data-col-index="35" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
             ${getDropdownDisplayText('platePerson', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
           </span>
         </td>
         <td>
-          <span class="cell-text-editable editable" data-field="plateOutput" data-col-index="35" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
+          <span class="cell-text-editable editable" data-field="plateOutput" data-col-index="36" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
             ${getDropdownDisplayText('plateOutput', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
           </span>
         </td>
@@ -2215,8 +2220,8 @@ if (!entry) {
     }
 
     // Validate required fields
-    if (!formValues.division || !formValues.segment || !formValues.category || !formValues.clientName || !formValues.jobName || !formValues.reference) {
-      alert('Please fill in all required fields: Division, Segment, Category, Client Name, Job Name, and Reference');
+    if (!formValues.division || !formValues.segment || !formValues.category || !formValues.clientName || !formValues.jobName || !formValues.reference || !formValues.executive) {
+      alert('Please fill in all required fields: Division, Segment, Category, Client Name, Job Name, Reference, and Executive');
       return;
     }
 
@@ -2232,6 +2237,7 @@ if (!entry) {
         category: formValues.category, // Category (e.g., Mono Carton, Label, etc.)
         segment: formValues.segment, // Segment (Commercial or Packaging)
         reference: formValues.reference, // Reference field (mandatory)
+        executive: formValues.executive, // Executive field (mandatory)
         userKey: (() => {
           // Convert displayName to userKey for prepressPerson
           if (!formValues.prepressPerson) return null;
@@ -2468,6 +2474,7 @@ if (!entry) {
     // Build table rows with checkbox instead of Status column
     const rowsHtml = data.map((item, index) => {
       const rowId = `user-wise-row-${index}`;
+      console.log('********************item', item);
       return `<tr data-row-id="${rowId}">
         <td style="text-align: center;">
           <input type="checkbox" class="user-wise-row-checkbox" data-index="${index}" data-row-id="${rowId}">
@@ -2475,6 +2482,7 @@ if (!entry) {
         <td>${(item.PONumber || '').replace(/"/g, '&quot;')}</td>
         <td>${formatDateDDMMMYYYY(item.PODate)}</td>
         <td>${(item.Jobcardnumber || '').replace(/"/g, '&quot;')}</td>
+        <td>${(item.Executive || '').replace(/"/g, '&quot;')}</td>
         <td>${(item.ClientName || '').replace(/"/g, '&quot;')}</td>
         <td>${(item.RefMISCode || '').replace(/"/g, '&quot;')}</td>
         <td>${(item.JobName || '').replace(/"/g, '&quot;')}</td>
