@@ -1875,11 +1875,12 @@
     }
 
     function handleCellEdit(e) {
-      const target = e.target;
-      // console.log('🎯 [EVENT] Cell edit triggered:', e.type, '| Target:', target.tagName, target.className);
+      // Make the whole cell clickable: find the nearest editable text cell
+      const target = e.target.closest('.cell-text-editable.editable, .cell-select.editable, .cell-input.editable');
+      // console.log('🎯 [EVENT] Cell edit triggered:', e.type, '| Raw target:', e.target.tagName, e.target.className, '| Resolved target:', target && target.tagName, target && target.className);
       
-      if (!target.classList.contains('editable')) {
-        // console.log('⏭️  [EVENT] Target is not editable, skipping');
+      if (!target || !target.classList.contains('editable')) {
+        // console.log('⏭️  [EVENT] No editable target found, skipping');
         return;
       }
       
