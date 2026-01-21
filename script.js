@@ -265,8 +265,13 @@
       }
       
       // console.log('📝 [TRACK] Creating new pending update entry');
+      // IMPORTANT: store a snapshot copy so subsequent mutations
+      // of `entry` do not change the original values used for comparison.
+      // Also keep a reference to the live row object so we can restore it on cancel.
+      const originalSnapshot = { ...entry };
       state.pendingUpdates.set(rowId, {
-        entry: entry, // Store original entry before any modifications
+        entry: originalSnapshot,  // immutable snapshot of original values
+        rowRef: entry,            // live reference used in the table/state
         modifiedFields: new Set(),
         updates: {}
       });
@@ -815,8 +820,17 @@
     if (!confirm(`Discard changes to ${state.pendingUpdates.size} row(s)?`)) {
       return;
     }
-    
-    // Clear pending updates
+
+    // Restore original values for all rows from their snapshots
+    state.pendingUpdates.forEach(({ entry: originalSnapshot, rowRef }) => {
+      if (!rowRef || !originalSnapshot) return;
+      // Copy all properties from the original snapshot back to the live row object
+      Object.keys(originalSnapshot).forEach((key) => {
+        rowRef[key] = originalSnapshot[key];
+      });
+    });
+
+    // Clear pending updates and update UI state
     state.pendingUpdates.clear();
     updateButtonState();
     
@@ -828,7 +842,7 @@
       cell.classList.remove('modified');
     });
     
-    // Re-render table from original data
+    // Re-render table from restored data
     applyFilters();
   }
 
@@ -1364,6 +1378,7 @@
           <option value="" ${statusValue === '' ? 'selected' : ''}></option>
           <option value="Approved" ${statusValue === 'Approved' ? 'selected' : ''}>Approved</option>
           <option value="Pending" ${statusValue === 'Pending' ? 'selected' : ''}>Pending</option>
+          <option value="Sent" ${statusValue === 'Sent' ? 'selected' : ''}>Sent</option>
           <option value="Redo" ${statusValue === 'Redo' ? 'selected' : ''}>Redo</option>
         `;
 
@@ -1391,6 +1406,27 @@
       default:
         return '<option value="">Select</option>';
     }
+  }
+
+  // Lazily populate options for a select dropdown when user first interacts
+  function ensureDropdownOptions(select) {
+    if (!select) return;
+
+    const field = select.dataset.field;
+    if (!field) return;
+
+    // Prefer the current select value (if user already changed it),
+    // otherwise fall back to the initial value from backend.
+    const currentValue = select.value || select.dataset.initialValue || '';
+    const division = select.dataset.division || '';
+
+    // Minimal entry-like object for generateDropdownHTML
+    const entryLike = { division };
+    entryLike[field] = currentValue;
+
+    select.innerHTML = generateDropdownHTML(field, entryLike, currentValue);
+    // Ensure the previously selected value stays selected
+    select.value = currentValue;
   }
 
   // Render table
@@ -1504,88 +1540,200 @@
         <td>${entry.clientName || ''}</td>
         <td>${entry.division || ''}</td>
         <td>
-          <span class="cell-text-editable editable" data-field="prepressPerson" data-col-index="10" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
-            ${getDropdownDisplayText('prepressPerson', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
-          </span>
+          <select
+            class="cell-select editable"
+            data-field="prepressPerson"
+            data-col-index="10"
+            data-initial-value="${(entry.prepressPerson || '').replace(/"/g, '&quot;')}"
+            data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
+          >
+            <option value="${(entry.prepressPerson || '').replace(/"/g, '&quot;')}">
+              ${getDropdownDisplayText('prepressPerson', entry) || 'Click to select'}
+            </option>
+          </select>
         </td>
         <td>
-          <span class="cell-text-editable editable" data-field="file" data-col-index="11" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
-            ${getDropdownDisplayText('file', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
-          </span>
+          <select
+            class="cell-select editable"
+            data-field="file"
+            data-col-index="11"
+            data-initial-value="${(entry.file || '').replace(/"/g, '&quot;')}"
+            data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
+          >
+            <option value="${(entry.file || '').replace(/"/g, '&quot;')}">
+              ${getDropdownDisplayText('file', entry) || 'Click to select'}
+            </option>
+          </select>
         </td>
-        <td><input type="date" class="cell-input editable" data-field="fileReceivedDate" data-col-index="12" value="${fileReceivedDateFmt}" /></td>
+        <td>${fileReceivedDateFmt}</td>
         <td>
-          <span class="cell-text-editable editable" data-field="softApprovalReqd" data-col-index="13" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
-            ${getDropdownDisplayText('softApprovalReqd', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
-          </span>
+          <select
+            class="cell-select editable"
+            data-field="softApprovalReqd"
+            data-col-index="13"
+            data-initial-value="${(entry.softApprovalReqd || '').toString().replace(/"/g, '&quot;')}"
+            data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
+          >
+            <option value="${(entry.softApprovalReqd || '').toString().replace(/"/g, '&quot;')}">
+              ${getDropdownDisplayText('softApprovalReqd', entry) || 'Click to select'}
+            </option>
+          </select>
         </td>
         <td>
-          <span class="cell-text-editable editable" data-field="softApprovalStatus" data-col-index="14" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
-            ${getDropdownDisplayText('softApprovalStatus', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
-          </span>
+          <select
+            class="cell-select editable"
+            data-field="softApprovalStatus"
+            data-col-index="14"
+            data-initial-value="${(entry.softApprovalStatus || '').replace(/"/g, '&quot;')}"
+            data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
+          >
+            <option value="${(entry.softApprovalStatus || '').replace(/"/g, '&quot;')}">
+              ${getDropdownDisplayText('softApprovalStatus', entry) || 'Click to select'}
+            </option>
+          </select>
         </td>
         <td>${softApprovalSentPlanDateFmt}</td>
         <td>${softApprovalSentActDateFmt}</td>
-        <td><input class="cell-input editable" data-field="softApprovalLink" data-col-index="17" value="${(entry.softApprovalLink || '').replace(/"/g, '&quot;')}" /></td>
+        <td>${(entry.softApprovalLink || '').replace(/"/g, '&quot;')}</td>
         <td>
-          <span class="cell-text-editable editable" data-field="hardApprovalReqd" data-col-index="18" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
-            ${getDropdownDisplayText('hardApprovalReqd', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
-          </span>
+          <select
+            class="cell-select editable"
+            data-field="hardApprovalReqd"
+            data-col-index="18"
+            data-initial-value="${(entry.hardApprovalReqd || '').toString().replace(/"/g, '&quot;')}"
+            data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
+          >
+            <option value="${(entry.hardApprovalReqd || '').toString().replace(/"/g, '&quot;')}">
+              ${getDropdownDisplayText('hardApprovalReqd', entry) || 'Click to select'}
+            </option>
+          </select>
         </td>
         <td>
-          <span class="cell-text-editable editable" data-field="hardApprovalStatus" data-col-index="19" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
-            ${getDropdownDisplayText('hardApprovalStatus', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
-          </span>
+          <select
+            class="cell-select editable"
+            data-field="hardApprovalStatus"
+            data-col-index="19"
+            data-initial-value="${(entry.hardApprovalStatus || '').replace(/"/g, '&quot;')}"
+            data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
+          >
+            <option value="${(entry.hardApprovalStatus || '').replace(/"/g, '&quot;')}">
+              ${getDropdownDisplayText('hardApprovalStatus', entry) || 'Click to select'}
+            </option>
+          </select>
         </td>
         <td>${hardApprovalSentPlanDateFmt}</td>
         <td>${hardApprovalSentActDateFmt}</td>
         <td>
-          <span class="cell-text-editable editable" data-field="mProofApprovalReqd" data-col-index="22" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
-            ${getDropdownDisplayText('mProofApprovalReqd', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
-          </span>
+          <select
+            class="cell-select editable"
+            data-field="mProofApprovalReqd"
+            data-col-index="22"
+            data-initial-value="${(entry.mProofApprovalReqd || '').toString().replace(/"/g, '&quot;')}"
+            data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
+          >
+            <option value="${(entry.mProofApprovalReqd || '').toString().replace(/"/g, '&quot;')}">
+              ${getDropdownDisplayText('mProofApprovalReqd', entry) || 'Click to select'}
+            </option>
+          </select>
         </td>
         <td>
-          <span class="cell-text-editable editable" data-field="mProofApprovalStatus" data-col-index="23" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
-            ${getDropdownDisplayText('mProofApprovalStatus', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
-          </span>
+          <select
+            class="cell-select editable"
+            data-field="mProofApprovalStatus"
+            data-col-index="23"
+            data-initial-value="${(entry.mProofApprovalStatus || '').replace(/"/g, '&quot;')}"
+            data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
+          >
+            <option value="${(entry.mProofApprovalStatus || '').replace(/"/g, '&quot;')}">
+              ${getDropdownDisplayText('mProofApprovalStatus', entry) || 'Click to select'}
+            </option>
+          </select>
         </td>
         <td>${mProofApprovalSentPlanDateFmt}</td>
         <td>${mProofApprovalSentActDateFmt}</td>
         <td>${finallyApprovedFmt}</td>
         <td>${finallyApprovedDateFmt}</td>
-        <td><input class="cell-input editable" data-field="artworkRemark" data-col-index="28" value="${(entry.artworkRemark || '').replace(/"/g, '&quot;')}" /></td>
+        <td>${(entry.artworkRemark || '').replace(/"/g, '&quot;')}</td>
         <td>
-          <span class="cell-text-editable editable" data-field="toolingPerson" data-col-index="29" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
-            ${getDropdownDisplayText('toolingPerson', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
-          </span>
+          <select
+            class="cell-select editable"
+            data-field="toolingPerson"
+            data-col-index="29"
+            data-initial-value="${(entry.toolingPerson || '').replace(/"/g, '&quot;')}"
+            data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
+          >
+            <option value="${(entry.toolingPerson || '').replace(/"/g, '&quot;')}">
+              ${getDropdownDisplayText('toolingPerson', entry) || 'Click to select'}
+            </option>
+          </select>
         </td>
         <td>
-          <span class="cell-text-editable editable" data-field="toolingDie" data-col-index="30" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
-            ${getDropdownDisplayText('toolingDie', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
-          </span>
+          <select
+            class="cell-select editable"
+            data-field="toolingDie"
+            data-col-index="30"
+            data-initial-value="${(entry.toolingDie || '').replace(/"/g, '&quot;')}"
+            data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
+          >
+            <option value="${(entry.toolingDie || '').replace(/"/g, '&quot;')}">
+              ${getDropdownDisplayText('toolingDie', entry) || 'Click to select'}
+            </option>
+          </select>
         </td>
         <td>
-          <span class="cell-text-editable editable" data-field="toolingBlock" data-col-index="31" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
-            ${getDropdownDisplayText('toolingBlock', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
-          </span>
+          <select
+            class="cell-select editable"
+            data-field="toolingBlock"
+            data-col-index="31"
+            data-initial-value="${(entry.toolingBlock || '').replace(/"/g, '&quot;')}"
+            data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
+          >
+            <option value="${(entry.toolingBlock || '').replace(/"/g, '&quot;')}">
+              ${getDropdownDisplayText('toolingBlock', entry) || 'Click to select'}
+            </option>
+          </select>
         </td>
-        <td><input class="cell-input editable" data-field="toolingRemark" data-col-index="32" value="${(entry.toolingRemark || '').replace(/"/g, '&quot;')}" /></td>
+        <td>${(entry.toolingRemark || '').replace(/"/g, '&quot;')}</td>
         <td>
-          <span class="cell-text-editable editable" data-field="blanket" data-col-index="33" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
-            ${getDropdownDisplayText('blanket', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
-          </span>
+          <select
+            class="cell-select editable"
+            data-field="blanket"
+            data-col-index="33"
+            data-initial-value="${(entry.blanket || '').replace(/"/g, '&quot;')}"
+            data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
+          >
+            <option value="${(entry.blanket || '').replace(/"/g, '&quot;')}">
+              ${getDropdownDisplayText('blanket', entry) || 'Click to select'}
+            </option>
+          </select>
         </td>
         <td>${toolingBlanketPlanFmt}</td>
         <td>${toolingBlanketActualFmt}</td>
         <td>
-          <span class="cell-text-editable editable" data-field="platePerson" data-col-index="35" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
-            ${getDropdownDisplayText('platePerson', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
-          </span>
+          <select
+            class="cell-select editable"
+            data-field="platePerson"
+            data-col-index="35"
+            data-initial-value="${(entry.platePerson || '').replace(/"/g, '&quot;')}"
+            data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
+          >
+            <option value="${(entry.platePerson || '').replace(/"/g, '&quot;')}">
+              ${getDropdownDisplayText('platePerson', entry) || 'Click to select'}
+            </option>
+          </select>
         </td>
         <td>
-          <span class="cell-text-editable editable" data-field="plateOutput" data-col-index="36" style="cursor: pointer; padding: 0.3rem 0.4rem; display: block; min-height: 1.2rem;">
-            ${getDropdownDisplayText('plateOutput', entry) || '<span style="color: #9ca3af;">Click to select</span>'}
-          </span>
+          <select
+            class="cell-select editable"
+            data-field="plateOutput"
+            data-col-index="36"
+            data-initial-value="${(entry.plateOutput || '').replace(/"/g, '&quot;')}"
+            data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
+          >
+            <option value="${(entry.plateOutput || '').replace(/"/g, '&quot;')}">
+              ${getDropdownDisplayText('plateOutput', entry) || 'Click to select'}
+            </option>
+          </select>
         </td>
         <td>${platePlanFmt}</td>
         <td>${plateActualFmt}</td>
@@ -1775,110 +1923,24 @@
 
     // Inline edit handlers (frontend only for now)
     if (elements.tableBody) {
+      // Lazily populate dropdown options when selects receive focus
+      elements.tableBody.addEventListener('focusin', (e) => {
+        const select = e.target.closest('.cell-select.editable');
+        if (!select) return;
+        ensureDropdownOptions(select);
+      });
+
       // Handle both change and input events for better UX
       elements.tableBody.addEventListener('change', handleCellEdit);
       elements.tableBody.addEventListener('blur', handleCellEdit, true); // Use capture for inputs
-      
-      // Handle click on dropdown text cells to convert to dropdown
-      elements.tableBody.addEventListener('click', (e) => {
-        // Make the entire visible cell clickable, including inner placeholder spans
-        const target = e.target.closest('.cell-text-editable');
-        if (target && !target.classList.contains('editing')) {
-          e.preventDefault();
-          e.stopPropagation();
-          
-          const field = target.dataset.field;
-          const colIndex = target.dataset.colIndex;
-          const tr = target.closest('tr');
-          if (!tr) return;
-          
-          let rowId = tr.getAttribute('data-id');
-          
-          // Find entry
-          let entry = null;
-          if (rowId && !rowId.startsWith('row-')) {
-            entry = state.entries.find(e => 
-              (e.__raw?._id && String(e.__raw._id) === String(rowId)) ||
-              (e.__raw?.__MongoId && String(e.__raw.__MongoId) === String(rowId)) ||
-              (e._id && String(e._id) === String(rowId)) ||
-              (e.__raw?.OrderBookingDetailsID && String(e.__raw.OrderBookingDetailsID) === String(rowId))
-            ) || state.filteredEntries.find(e => 
-              (e.__raw?._id && String(e.__raw._id) === String(rowId)) ||
-              (e.__raw?.__MongoId && String(e.__raw.__MongoId) === String(rowId)) ||
-              (e._id && String(e._id) === String(rowId)) ||
-              (e.__raw?.OrderBookingDetailsID && String(e.__raw.OrderBookingDetailsID) === String(rowId))
-            );
-          } else if (rowId && rowId.startsWith('row-')) {
-            const index = parseInt(rowId.replace('row-', ''), 10);
-            entry = state.filteredEntries[index];
-          }
-          
-          if (!entry) {
-            // Fallback: try to find entry by row position (accounting for pagination)
-            const allRows = Array.from(tr.parentElement.querySelectorAll('tr.data-row'));
-            const rowIndex = allRows.indexOf(tr);
-            if (rowIndex !== -1) {
-              // Calculate actual index accounting for current page
-              const pageSize = state.pagination.pageSize;
-              const currentPage = state.pagination.currentPage;
-              const actualIndex = (currentPage - 1) * pageSize + rowIndex;
-              if (actualIndex >= 0 && actualIndex < state.filteredEntries.length) {
-                entry = state.filteredEntries[actualIndex];
-              }
-            }
-          }
-          
-          if (entry && field) {
-            const currentValue = entry[field] || '';
-            const dropdownHTML = generateDropdownHTML(field, entry, currentValue);
-            const select = document.createElement('select');
-            select.className = 'cell-select editable editing';
-            select.setAttribute('data-field', field);
-            if (colIndex) select.setAttribute('data-col-index', colIndex);
-            select.innerHTML = dropdownHTML;
-            
-            // Replace text cell with dropdown
-            target.replaceWith(select);
-            select.focus();
-            
-            // Track if change event has already been handled to prevent blur from re-processing
-            let changeHandled = false;
-            
-            // Handle change event - stop propagation to prevent double handling
-            select.addEventListener('change', function(e) {
-              e.stopPropagation(); // Prevent bubbling to tableBody
-              changeHandled = true;
-              handleCellEdit(e);
-            });
-            
-            // Blur handler - only process if change wasn't already handled
-            // If change was handled, handleCellEdit will convert dropdown to text via its own setTimeout
-            select.addEventListener('blur', function(e) {
-              e.stopPropagation(); // Prevent bubbling to tableBody
-              
-              // Only process if change wasn't handled (e.g., user clicked away without changing)
-              // If change was already handled, the handleCellEdit setTimeout will handle conversion
-              if (!changeHandled) {
-                setTimeout(() => {
-                  if (select.parentElement) {
-                    handleCellEdit(e);
-                  }
-                }, 200);
-              }
-              // Reset flag for next interaction
-              changeHandled = false;
-            }, true);
-          }
-        }
-      });
-      
+
       // console.log('✅ [INIT] Edit handlers attached to table body');
     } else {
       // console.error('❌ [INIT] Table body element not found!');
     }
 
     function handleCellEdit(e) {
-      // Make the whole cell clickable: find the nearest editable text cell
+      // Make the whole cell clickable/focusable: find the nearest editable element
       const target = e.target.closest('.cell-text-editable.editable, .cell-select.editable, .cell-input.editable');
       // console.log('🎯 [EVENT] Cell edit triggered:', e.type, '| Raw target:', e.target.tagName, e.target.className, '| Resolved target:', target && target.tagName, target && target.className);
       
@@ -1918,7 +1980,7 @@
       }
 
       // console.log('✅ [EDIT] Field determined:', field);
-
+      
       const tr = target.closest('tr');
       if (!tr) {
         // console.error('❌ [EDIT] Could not find parent <tr> element');
@@ -2039,6 +2101,15 @@ if (!entry) {
 
       // console.log('📝 [EDIT] Field:', field, '| Value:', newValue, '| Row:', rowId);
 
+      // Capture old value before change (for derived logic)
+      const oldValue = entry[field];
+
+      // Track the modification (this will check if value is back to original)
+      trackRowModification(rowId, entry, field, newValue);
+
+      // Now mutate the entry with the new value so the UI model is up to date
+      entry[field] = newValue;
+
       // For SQL data: When person dropdown changes, immediately update the corresponding ID field
       const personFields = ['prepressPerson', 'toolingPerson', 'platePerson'];
       const sourceDb = entry.__raw?.__SourceDB || entry.__SourceDB;
@@ -2125,8 +2196,92 @@ if (!entry) {
         }
       }
 
-      // Track the modification (this will check if value is back to original)
-      trackRowModification(rowId, entry, field, newValue);
+      // Auto-update approval statuses when required Yes/No *actually changes*
+      if (field === 'softApprovalReqd' || field === 'hardApprovalReqd' || field === 'mProofApprovalReqd') {
+        // Compare old vs new required value; if same, do nothing.
+        const oldRequired = (oldValue || '').toString().trim().toLowerCase();
+        const newRequired = (newValue || '').toString().trim().toLowerCase();
+        if (oldRequired === newRequired) {
+          // User just focused/re-selected the same value; don't touch status.
+          // (trackRowModification above will also treat this as "no change")
+          // Early return from this block only.
+        } else {
+          const normalized = newRequired;
+          const statusFieldMap = {
+            softApprovalReqd: 'softApprovalStatus',
+            hardApprovalReqd: 'hardApprovalStatus',
+            mProofApprovalReqd: 'mProofApprovalStatus',
+          };
+          const statusField = statusFieldMap[field];
+
+          if (statusField) {
+            let newStatus = '';
+            if (normalized === 'yes') {
+              newStatus = 'Pending';
+            } else if (normalized === 'no') {
+              newStatus = 'Approved';
+            } else {
+              newStatus = '';
+            }
+
+            // Only apply if status actually changes
+            if ((entry[statusField] || '') !== newStatus) {
+              entry[statusField] = newStatus;
+              trackRowModification(rowId, entry, statusField, newStatus);
+
+              // Update the corresponding status dropdown in this row so the user sees it immediately
+              const statusSelect = tr.querySelector(
+                `select.cell-select.editable[data-field="${statusField}"]`
+              );
+              if (statusSelect) {
+                // Keep initial value in sync for lazy option generation
+                statusSelect.dataset.initialValue = newStatus;
+
+                const label = newStatus || 'Click to select';
+                if (statusSelect.options.length === 0) {
+                  statusSelect.add(new Option(label, newStatus));
+                } else {
+                  const opt = statusSelect.options[0];
+                  opt.value = newStatus;
+                  opt.textContent = label;
+                }
+                statusSelect.value = newStatus;
+              }
+            }
+          }
+        }
+      }
+
+      // Auto-update Plate Output when Plate Person changes from blank to a value
+      if (field === 'platePerson') {
+        const oldPlatePerson = (oldValue || '').toString().trim();
+        const newPlatePerson = (newValue || '').toString().trim();
+        if (!oldPlatePerson && newPlatePerson) {
+          // Only when going from blank -> some person
+          const newPlateOutput = 'Pending';
+          if ((entry.plateOutput || '') !== newPlateOutput) {
+            entry.plateOutput = newPlateOutput;
+            trackRowModification(rowId, entry, 'plateOutput', newPlateOutput);
+
+            // Update Plate Output dropdown in this row so the user sees "Pending" immediately
+            const plateOutputSelect = tr.querySelector(
+              'select.cell-select.editable[data-field="plateOutput"]'
+            );
+            if (plateOutputSelect) {
+              plateOutputSelect.dataset.initialValue = newPlateOutput;
+              const label = newPlateOutput || 'Click to select';
+              if (plateOutputSelect.options.length === 0) {
+                plateOutputSelect.add(new Option(label, newPlateOutput));
+              } else {
+                const opt = plateOutputSelect.options[0];
+                opt.value = newPlateOutput;
+                opt.textContent = label;
+              }
+              plateOutputSelect.value = newPlateOutput;
+            }
+          }
+        }
+      }
       
       // Update the entry in state (without re-rendering)
       const entryIndex = state.entries.findIndex(e => {
