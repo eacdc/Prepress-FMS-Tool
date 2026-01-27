@@ -337,6 +337,7 @@
     const fieldMap = {
       file: 'FileStatus',
       fileReceivedDate: 'FileReceivedDate',
+      refPCC: 'RefPCC',
       softApprovalReqd: 'SoftApprovalReqd',
       softApprovalStatus: 'SoftApprovalStatus',
       softApprovalLink: 'LinkofSoftApprovalfile',
@@ -1260,6 +1261,7 @@
   // Column mapping: index -> field name (for editable fields)
   // Note: Executive column added at index 6, so all indices after it shifted by +1
   const COLUMN_FIELD_MAP = {
+    7: 'refPCC',             // Ref P.C.C...
     10: 'prepressPerson',      // Prepress Person (was 9)
     11: 'file',               // File (was 10)
     12: 'fileReceivedDate',   // File Received Date (was 11)
@@ -1570,7 +1572,15 @@
         <td>${pwoDateFmt}</td>
         <td>${entry.jobName || ''}</td>
         <td>${entry.executive || ''}</td>
-        <td>${entry.refPCC || ''}</td>
+        <td>
+          <input
+            type="text"
+            class="cell-input editable"
+            data-field="refPCC"
+            data-col-index="7"
+            value="${(entry.refPCC || '').replace(/"/g, '&quot;')}"
+          />
+        </td>
         <td>${entry.clientName || ''}</td>
         <td>${entry.division || ''}</td>
         <td>
