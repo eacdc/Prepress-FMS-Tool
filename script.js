@@ -56,6 +56,8 @@
     formCancelBtn: document.getElementById('form-cancel-btn'),
     addEntryForm: document.getElementById('add-entry-form'),
     pendingCountDisplay: document.getElementById('pending-count-display'),
+    formTokenPreview: document.getElementById('form-token-preview'),
+    formTokenValue: document.getElementById('form-token-value'),
     btnUserWisePending: document.getElementById('btn-user-wise-pending'),
     userWisePendingModal: document.getElementById('user-wise-pending-modal'),
     userWiseModalOverlay: document.getElementById('user-wise-modal-overlay'),
@@ -1685,7 +1687,15 @@
         <td>${mProofApprovalSentActDateFmt}</td>
         <td>${finallyApprovedFmt}</td>
         <td>${finallyApprovedDateFmt}</td>
-        <td>${(entry.artworkRemark || '').replace(/"/g, '&quot;')}</td>
+        <td>
+          <input
+            type="text"
+            class="cell-input editable"
+            data-field="artworkRemark"
+            data-col-index="28"
+            value="${(entry.artworkRemark || '').replace(/"/g, '&quot;')}"
+          />
+        </td>
         <td>
           <select
             class="cell-select editable"
@@ -2518,6 +2528,26 @@ if (!entry) {
       if (divisionSelect && divisionSelect.value) {
         updatePersonDropdowns(divisionSelect.value);
       }
+
+      // Fetch next token number preview
+      if (elements.formTokenValue) {
+        elements.formTokenValue.textContent = 'Loading...';
+      }
+      fetch('/api/artwork/unordered/next-token')
+        .then(res => res.json())
+        .then(data => {
+          if (data && data.ok && data.tokenNumber && elements.formTokenValue) {
+            elements.formTokenValue.textContent = data.tokenNumber;
+          } else if (elements.formTokenValue) {
+            elements.formTokenValue.textContent = 'Unavailable';
+          }
+        })
+        .catch(err => {
+          console.error('❌ Error fetching next token number preview:', err);
+          if (elements.formTokenValue) {
+            elements.formTokenValue.textContent = 'Unavailable';
+          }
+        });
     }
   }
 
@@ -2565,6 +2595,11 @@ if (!entry) {
         segment: formValues.segment, // Segment (Commercial or Packaging)
         reference: formValues.reference, // Reference field (mandatory)
         executive: formValues.executive, // Executive field (mandatory)
+        tokenNumber: (() => {
+          const tokenText = elements.formTokenValue?.textContent?.trim() || '';
+          const match = /^UN-\d{6}$/.test(tokenText);
+          return match ? tokenText : undefined;
+        })(),
         userKey: (() => {
           // Convert displayName to userKey for prepressPerson
           if (!formValues.prepressPerson) return null;
@@ -2846,20 +2881,20 @@ if (!entry) {
         <td>${formatDateDDMMMYYYY(item.FileReceivedDate)}</td>
         <td>${(item.Operation || '').replace(/"/g, '&quot;')}</td>
         <td>
-          <input 
-            type="text" 
-            class="user-wise-remark-input" 
-            data-index="${index}" 
-            value="${(item.Remarks || '').replace(/"/g, '&quot;')}" 
+          <textarea
+            class="user-wise-remark-input"
+            data-index="${index}"
+            data-original-value="${(item.Remarks || '').replace(/"/g, '&quot;')}"
             placeholder="Enter remark..."
-            style="width: 100%; padding: 0.25rem 0.5rem; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px; font-size: 0.75rem;"
-          >
+            style="width: 100%; padding: 0.25rem 0.5rem; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px; font-size: 0.7rem; min-height: 2.2rem; resize: vertical;"
+          >${(item.Remarks || '').replace(/"/g, '&quot;')}</textarea>
         </td>
         <td>
           <input 
             type="url" 
             class="user-wise-link-input" 
-            data-index="${index}" 
+            data-index="${index}"
+            data-original-value="${(item.Link || '').replace(/"/g, '&quot;')}"
             value="${(item.Link || '').replace(/"/g, '&quot;')}" 
             placeholder="Enter link..."
             style="width: 100%; padding: 0.25rem 0.5rem; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px; font-size: 0.75rem;"
@@ -2871,7 +2906,7 @@ if (!entry) {
     
     elements.userWiseResultsTableBody.innerHTML = rowsHtml;
     
-    // Store data for later use with checkboxes
+    // Store data for later use with checkboxes and change tracking
     window.userWiseResultsData = data;
     
     // Log stored data to verify metadata fields are present
@@ -2902,6 +2937,46 @@ if (!entry) {
       checkbox.addEventListener('change', () => {
         updateSelectedCount();
         updateSelectAllState();
+      });
+    });
+
+    // Auto-toggle checkboxes when remark/link is edited or reverted
+    const remarkInputs = elements.userWiseResultsTableBody.querySelectorAll('.user-wise-remark-input');
+    const linkInputs = elements.userWiseResultsTableBody.querySelectorAll('.user-wise-link-input');
+
+    function syncCheckboxForIndex(index) {
+      const checkbox = elements.userWiseResultsTableBody.querySelector(`.user-wise-row-checkbox[data-index="${index}"]`);
+      if (!checkbox) return;
+
+      const remark = elements.userWiseResultsTableBody.querySelector(`.user-wise-remark-input[data-index="${index}"]`);
+      const link = elements.userWiseResultsTableBody.querySelector(`.user-wise-link-input[data-index="${index}"]`);
+
+      const originalRemark = (remark?.dataset.originalValue || '').trim();
+      const originalLink = (link?.dataset.originalValue || '').trim();
+
+      const currentRemark = (remark?.value || remark?.textContent || '').trim();
+      const currentLink = (link?.value || '').trim();
+
+      const changed =
+        currentRemark !== originalRemark ||
+        currentLink !== originalLink;
+
+      checkbox.checked = changed;
+      updateSelectedCount();
+      updateSelectAllState();
+    }
+
+    remarkInputs.forEach((input) => {
+      const index = input.dataset.index;
+      ['input', 'change', 'blur'].forEach(evt => {
+        input.addEventListener(evt, () => syncCheckboxForIndex(index));
+      });
+    });
+
+    linkInputs.forEach((input) => {
+      const index = input.dataset.index;
+      ['input', 'change', 'blur'].forEach(evt => {
+        input.addEventListener(evt, () => syncCheckboxForIndex(index));
       });
     });
     

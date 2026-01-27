@@ -570,9 +570,16 @@ h1 {
 
 .cell-input.modified,
 .cell-select.modified {
-  background-color: rgba(251, 191, 36, 0.2);
+  background-color: rgba(251, 191, 36, 0.18);
   border-color: #fbbf24;
   border-width: 2px;
+  color: var(--text-primary);
+}
+
+/* Ensure options inside modified selects remain readable */
+.cell-select.modified option {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
 }
 
 /* Update Actions Bar */
@@ -790,6 +797,10 @@ h1 {
 #user-wise-results-modal .prepress-table {
   background: var(--bg-secondary) !important;
   color: var(--text-primary) !important;
+  font-size: 0.75em !important; /* 75% of base size */
+  width: 100% !important;
+  min-width: 0 !important;
+  table-layout: fixed;
 }
 
 #user-wise-results-modal .prepress-table thead {
@@ -825,14 +836,17 @@ h1 {
 #user-wise-results-modal .prepress-table tbody td {
   color: var(--text-primary) !important;
   background: transparent !important;
-  font-size: 0.75rem !important;
-  padding: 0.5rem 0.4rem !important;
+  font-size: 0.7rem !important;
+  padding: 0.35rem 0.35rem !important;
+  white-space: normal;
+  word-break: break-word;
 }
 
 #user-wise-results-modal .prepress-table thead th {
   font-size: 0.7rem !important;
-  padding: 0.6rem 0.4rem !important;
+  padding: 0.45rem 0.35rem !important;
   font-weight: 600 !important;
+  white-space: normal;
 }
 
 /* Checkbox styling for user-wise results table */
@@ -880,9 +894,17 @@ h1 {
   border: 1px solid var(--border-color);
   color: var(--text-primary);
   border-radius: 4px;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-family: inherit;
   transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+#user-wise-results-modal .user-wise-remark-input {
+  resize: vertical;
+  min-height: 2.2rem;
+  line-height: 1.3;
+  white-space: normal;
+  word-break: break-word;
 }
 
 #user-wise-results-modal .user-wise-remark-input:focus,
@@ -908,8 +930,8 @@ h1 {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 12px;
-  width: 90%;
-  max-width: 900px;
+  width: 95%;
+  max-width: 1300px; /* Wider for user-wise table (~130% of original) */
   max-height: 90vh;
   display: flex;
   flex-direction: column;

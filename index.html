@@ -175,8 +175,8 @@
                   <th>
                     <select class="filter-select" data-column="division">
                       <option value="">(All)</option>
-                      <option value="Packaging">Packaging</option>
-                      <option value="Commercial">Commercial</option>
+                      <option value="Packaging">KOLKATA</option>
+                      <option value="Commercial">AHMEDABAD</option>
                     </select>
                   </th>
                   <th>
@@ -406,6 +406,12 @@
       </div>
       <div class="modal-body">
         <form id="add-entry-form">
+          <div class="form-section">
+            <div id="form-token-preview" style="margin-bottom: 0.75rem; font-size: 0.9rem; font-weight: 600; color: var(--text-primary);">
+              Token Number (will be generated on Add Entry):
+              <span id="form-token-value" style="color: var(--primary-color);">Loading...</span>
+            </div>
+          </div>
           <!-- Top 4 Required Fields -->
           <div class="form-section">
             <h3>Basic Information</h3>
@@ -733,9 +739,9 @@
         <div id="user-wise-results-empty" class="empty-state" style="display: none; text-align: center; padding: 3rem;">
           <p>No pending data found for this user.</p>
         </div>
-        <div id="user-wise-results-table-container" style="display: none; flex: 1; overflow: auto; position: relative; min-height: 0;">
+        <div id="user-wise-results-table-container" style="display: none; flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; min-height: 0;">
             <div class="table-wrapper">
-              <table id="user-wise-results-table" class="prepress-table" style="min-width: 1200px;">
+              <table id="user-wise-results-table" class="prepress-table">
                 <thead>
                   <tr class="table-header-row">
                     <th style="width: 50px;">
