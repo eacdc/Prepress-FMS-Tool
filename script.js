@@ -2533,7 +2533,9 @@ if (!entry) {
       if (elements.formTokenValue) {
         elements.formTokenValue.textContent = 'Loading...';
       }
-      fetch('/api/artwork/unordered/next-token')
+      const apiBase = 'https://cdcapi.onrender.com';
+
+      fetch(`${apiBase}/api/artwork/unordered/next-token`)
         .then(res => res.json())
         .then(data => {
           if (data && data.ok && data.tokenNumber && elements.formTokenValue) {
