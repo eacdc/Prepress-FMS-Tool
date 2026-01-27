@@ -27,6 +27,7 @@
     usersBySite: { KOLKATA: [], AHMEDABAD: [] }, // Users grouped by site
     sourceFilters: ['KOLKATA', 'AHMEDABAD', 'UNORDERED'], // Default: show all sources
     quickFilterPreset: '', // Additional quick filter for main pending grid
+    sortPreset: '', // Sorting preset for main pending grid
     pagination: {
       currentPage: 1,
       pageSize: 300,
@@ -78,12 +79,14 @@
     userWiseUnselectAllBtn: document.getElementById('user-wise-unselect-all-btn'),
     userWiseSourceFilterSection: document.getElementById('user-wise-source-filter-section'),
     userWiseResultsFiltering: document.getElementById('user-wise-results-filtering'),
+    userWiseSortPreset: document.getElementById('user-wise-sort-preset'),
     paginationContainer: document.getElementById('pagination-container'),
     paginationInfo: document.getElementById('pagination-info'),
     paginationPrev: document.getElementById('pagination-prev'),
     paginationNext: document.getElementById('pagination-next'),
     paginationPageInput: document.getElementById('pagination-page-input'),
     quickFilterPreset: document.getElementById('quick-filter-preset'),
+    sortPreset: document.getElementById('sort-preset'),
     // COMMENTED OUT: Modal elements no longer used (inline editing instead)
     // userWiseUpdateModal: document.getElementById('user-wise-update-modal'),
     // userWiseUpdateModalOverlay: document.getElementById('user-wise-update-modal-overlay'),
@@ -1091,8 +1094,7 @@
         loadingOverlay.style.display = 'flex';
       }
     }
-    
-    state.filteredEntries = state.entries.filter(entry => {
+    const filtered = state.entries.filter(entry => {
       // First apply source filter (Kolkata, Ahmedabad, Unordered)
       const sourceDb = entry.__raw?.__SourceDB || entry.__SourceDB || '';
       const site = entry.__raw?.__Site || entry.__Site || entry.division || '';
@@ -1205,6 +1207,9 @@
       return true;
     });
 
+    // Apply sort preset to filtered entries
+    state.filteredEntries = applyMainSortPreset(filtered);
+
     // Reset to page 1 when filters change
     state.pagination.currentPage = 1;
     
@@ -1221,6 +1226,33 @@
         loadingOverlay.style.display = 'none';
       }
     }
+  }
+
+  // Apply sorting preset for main pending grid
+  function applyMainSortPreset(list) {
+    const preset = state.sortPreset || '';
+    if (!preset) return list.slice();
+
+    const sorted = list.slice();
+
+    const getTime = (value) => {
+      if (!value) return 0;
+      const t = new Date(value).getTime();
+      return Number.isNaN(t) ? 0 : t;
+    };
+
+    if (preset === 'soDate-asc' || preset === 'soDate-desc') {
+      sorted.sort((a, b) => getTime(a.soDate) - getTime(b.soDate));
+      if (preset === 'soDate-desc') sorted.reverse();
+    } else if (preset === 'pwoNo-asc' || preset === 'pwoNo-desc') {
+      sorted.sort((a, b) => (a.pwoNo || '').localeCompare(b.pwoNo || ''));
+      if (preset === 'pwoNo-desc') sorted.reverse();
+    } else if (preset === 'jobName-asc' || preset === 'jobName-desc') {
+      sorted.sort((a, b) => (a.jobName || '').localeCompare(b.jobName || ''));
+      if (preset === 'jobName-desc') sorted.reverse();
+    }
+
+    return sorted;
   }
 
   // Column mapping: index -> field name (for editable fields)
@@ -1845,6 +1877,15 @@
       elements.quickFilterPreset.addEventListener('change', (e) => {
         const value = e.target.value || '';
         state.quickFilterPreset = value;
+        applyFilters(true);
+      });
+    }
+
+    // Sort preset for main pending grid
+    if (elements.sortPreset) {
+      elements.sortPreset.addEventListener('change', (e) => {
+        const value = e.target.value || '';
+        state.sortPreset = value;
         applyFilters(true);
       });
     }
@@ -2722,13 +2763,42 @@ if (!entry) {
         }
         return false;
       });
+
+      // Apply user-wise sort preset
+      const sortedData = applyUserWiseSortPreset(filteredData);
       
       // Hide filtering state and render filtered data
       if (elements.userWiseResultsFiltering) {
         elements.userWiseResultsFiltering.style.display = 'none';
       }
-      renderUserWiseResultsTable(filteredData);
+      renderUserWiseResultsTable(sortedData);
     });
+  }
+
+  // Apply sorting preset for user-wise pending results
+  function applyUserWiseSortPreset(list) {
+    if (!Array.isArray(list)) return [];
+
+    const preset = elements.userWiseSortPreset ? (elements.userWiseSortPreset.value || '') : '';
+    if (!preset) return list.slice();
+
+    const sorted = list.slice();
+
+    const getTime = (value) => {
+      if (!value) return 0;
+      const t = new Date(value).getTime();
+      return Number.isNaN(t) ? 0 : t;
+    };
+
+    if (preset === 'poDate-asc' || preset === 'poDate-desc') {
+      sorted.sort((a, b) => getTime(a.PODate) - getTime(b.PODate));
+      if (preset === 'poDate-desc') sorted.reverse();
+    } else if (preset === 'jobcard-asc' || preset === 'jobcard-desc') {
+      sorted.sort((a, b) => (a.Jobcardnumber || '').localeCompare(b.Jobcardnumber || ''));
+      if (preset === 'jobcard-desc') sorted.reverse();
+    }
+
+    return sorted;
   }
 
   // Render user-wise results table
@@ -3409,6 +3479,16 @@ if (!entry) {
         });
       });
     });
+
+    // User Wise Sort dropdown
+    if (elements.userWiseSortPreset) {
+      elements.userWiseSortPreset.addEventListener('change', () => {
+        // Re-apply filters and sorting when sort preset changes
+        requestAnimationFrame(() => {
+          applyUserWiseFilters();
+        });
+      });
+    }
   }
 
   // COMMENTED OUT: User Wise Update Modal Event Listeners (no longer using modal)

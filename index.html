@@ -69,6 +69,18 @@
               <option value="pending-plates">Pending Plates</option>
             </select>
           </div>
+          <div class="source-filter-options" style="margin-left: 1rem; gap: 0.5rem;">
+            <label class="source-filter-label" for="sort-preset">Sort:</label>
+            <select id="sort-preset" class="filter-select" style="min-width: 200px;">
+              <option value="">(Default)</option>
+              <option value="soDate-asc">SO Date (Oldest first)</option>
+              <option value="soDate-desc">SO Date (Newest first)</option>
+              <option value="pwoNo-asc">PWO No (A → Z)</option>
+              <option value="pwoNo-desc">PWO No (Z → A)</option>
+              <option value="jobName-asc">Job Name (A → Z)</option>
+              <option value="jobName-desc">Job Name (Z → A)</option>
+            </select>
+          </div>
           <button id="btn-add-entry" class="btn-primary small">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
               <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
@@ -699,6 +711,16 @@
                 <input type="checkbox" id="user-wise-filter-unordered" data-source="UNORDERED" checked />
                 <span>Unordered</span>
               </label>
+            </div>
+            <div class="source-filter-options" style="margin-left: 1rem; gap: 0.5rem;">
+              <label class="source-filter-label" for="user-wise-sort-preset">Sort:</label>
+              <select id="user-wise-sort-preset" class="filter-select" style="min-width: 200px;">
+                <option value="">(Default)</option>
+                <option value="poDate-asc">PO Date (Oldest first)</option>
+                <option value="poDate-desc">PO Date (Newest first)</option>
+                <option value="jobcard-asc">Jobcard Number (A → Z)</option>
+                <option value="jobcard-desc">Jobcard Number (Z → A)</option>
+              </select>
             </div>
           </div>
         </div>
