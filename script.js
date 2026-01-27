@@ -889,6 +889,7 @@
 
       // Division / site
       division: row.Division || row.division || row.__Site || '',
+      segmentName: row.SegmentName || row.segmentName || '',
 
       // People
       prepressPerson: row.PrepressPerson || row.PrepressPersonName || '',
@@ -1583,6 +1584,7 @@
         </td>
         <td>${entry.clientName || ''}</td>
         <td>${entry.division || ''}</td>
+        <td>${entry.segmentName || ''}</td>
         <td>
           <select
             class="cell-select editable"
@@ -2607,6 +2609,8 @@ if (!entry) {
         segment: formValues.segment, // Segment (Commercial or Packaging)
         reference: formValues.reference, // Reference field (mandatory)
         executive: formValues.executive, // Executive field (mandatory)
+        file: formValues.file || null,
+        fileReceivedDate: formValues.fileReceivedDate || null,
         tokenNumber: (() => {
           const tokenText = elements.formTokenValue?.textContent?.trim() || '';
           const match = /^UN-\d{6}$/.test(tokenText);
