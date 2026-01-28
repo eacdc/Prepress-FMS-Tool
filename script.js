@@ -42,6 +42,7 @@
     emptyState: document.getElementById('empty-state'),
     loadingOverlay: document.getElementById('loading-overlay'),
     btnAddEntry: document.getElementById('btn-add-entry'),
+    btnClearFilters: document.getElementById('btn-clear-filters'),
     tableSection: document.getElementById('table-section'),
     tableWrapper: document.querySelector('.table-wrapper'),
     btnViewPending: document.getElementById('btn-view-pending'),
@@ -81,6 +82,7 @@
     userWiseUnselectAllBtn: document.getElementById('user-wise-unselect-all-btn'),
     userWiseSourceFilterSection: document.getElementById('user-wise-source-filter-section'),
     userWiseResultsFiltering: document.getElementById('user-wise-results-filtering'),
+    userWiseRowCount: document.getElementById('user-wise-row-count'),
     userWiseSortPreset: document.getElementById('user-wise-sort-preset'),
     paginationContainer: document.getElementById('pagination-container'),
     paginationInfo: document.getElementById('pagination-info'),
@@ -1911,6 +1913,13 @@
         applyFilters(true);
       });
     }
+
+    // Clear Filters button - refresh page and clear all filters/state
+    if (elements.btnClearFilters) {
+      elements.btnClearFilters.addEventListener('click', () => {
+        window.location.reload();
+      });
+    }
   }
 
   // Initialize
@@ -2790,33 +2799,97 @@ if (!entry) {
       }
     });
     
+    // Get column filter values
+    const columnFilters = {};
+    const filterInputs = document.querySelectorAll('#user-wise-results-table .user-wise-filter-input');
+    filterInputs.forEach(input => {
+      const column = input.dataset.column;
+      const value = input.value.trim();
+      if (column && value) {
+        columnFilters[column] = value;
+      }
+    });
+    
     // Use requestAnimationFrame to allow checkbox to render first, then filter
     requestAnimationFrame(() => {
       // Filter data based on selected sources
-      const filteredData = window.userWiseAllData.filter(item => {
+      let filteredData = window.userWiseAllData.filter(item => {
         const sourceDb = item.__SourceDB || '';
         const site = item.Division || '';
         
+        let matchesSource = false;
         for (const sourceFilter of selectedSources) {
           if (sourceFilter === 'KOLKATA') {
             if (sourceDb === 'KOL_SQL' || site.toUpperCase() === 'KOLKATA') {
-              return true;
+              matchesSource = true;
+              break;
             }
           } else if (sourceFilter === 'AHMEDABAD') {
             if (sourceDb === 'AMD_SQL' || site.toUpperCase() === 'AHMEDABAD') {
-              return true;
+              matchesSource = true;
+              break;
             }
           } else if (sourceFilter === 'UNORDERED') {
             if (sourceDb === 'MONGO_UNORDERED') {
-              return true;
+              matchesSource = true;
+              break;
             }
           }
         }
+        
+        if (!matchesSource) {
+          return false;
+        }
+        
+        // Apply column filters
+        for (const [column, filterValue] of Object.entries(columnFilters)) {
+          const itemValue = (item[column] || '').toString().toLowerCase();
+          const searchValue = filterValue.toLowerCase();
+          if (!itemValue.includes(searchValue)) {
+            return false;
+          }
+        }
+        
+        return true;
+      });
+
+      // Business rule: for Plate Output, only include rows that are finally approved
+      // SQL data: use FinalApprovalStatus === 'Yes'
+      // Mongo data: use Status derived from finalApproval.approved ('Approved' vs 'Pending')
+      filteredData = filteredData.filter(item => {
+        const op = (item.Operation || '').toString().trim();
+        if (op !== 'Plate Output') {
+          return true;
+        }
+
+        const finalStatusRaw =
+          (item.FinalApprovalStatus !== undefined && item.FinalApprovalStatus !== null)
+            ? item.FinalApprovalStatus
+            : item.Status;
+
+        // console.log('********************finalStatusRaw', finalStatusRaw);
+        // console.log('********************item', JSON.stringify(item));
+        const finalStatus = (finalStatusRaw || '').toString().trim().toLowerCase();
+
+        // Include only when final approval is clearly yes/approved
+        if (finalStatus === 'yes' || finalStatus === 'approved') {
+          return true;
+        }
+
         return false;
       });
 
       // Apply user-wise sort preset
       const sortedData = applyUserWiseSortPreset(filteredData);
+
+      // Update row count display
+      if (elements.userWiseRowCount) {
+        const countSpan = elements.userWiseRowCount.querySelector('span strong');
+        if (countSpan) {
+          countSpan.textContent = String(sortedData.length || 0);
+        }
+        elements.userWiseRowCount.style.display = 'block';
+      }
       
       // Hide filtering state and render filtered data
       if (elements.userWiseResultsFiltering) {
@@ -2831,7 +2904,11 @@ if (!entry) {
     if (!Array.isArray(list)) return [];
 
     const preset = elements.userWiseSortPreset ? (elements.userWiseSortPreset.value || '') : '';
-    if (!preset) return list.slice();
+    const headerSort = window.userWiseHeaderSort || ''; // Plan Date header sort
+    
+    // Use header sort if available, otherwise use preset
+    const sortType = headerSort || preset;
+    if (!sortType) return list.slice();
 
     const sorted = list.slice();
 
@@ -2841,12 +2918,15 @@ if (!entry) {
       return Number.isNaN(t) ? 0 : t;
     };
 
-    if (preset === 'poDate-asc' || preset === 'poDate-desc') {
+    if (sortType === 'poDate-asc' || sortType === 'poDate-desc') {
       sorted.sort((a, b) => getTime(a.PODate) - getTime(b.PODate));
-      if (preset === 'poDate-desc') sorted.reverse();
-    } else if (preset === 'jobcard-asc' || preset === 'jobcard-desc') {
+      if (sortType === 'poDate-desc') sorted.reverse();
+    } else if (sortType === 'jobcard-asc' || sortType === 'jobcard-desc') {
       sorted.sort((a, b) => (a.Jobcardnumber || '').localeCompare(b.Jobcardnumber || ''));
-      if (preset === 'jobcard-desc') sorted.reverse();
+      if (sortType === 'jobcard-desc') sorted.reverse();
+    } else if (sortType === 'planDate-asc' || sortType === 'planDate-desc') {
+      sorted.sort((a, b) => getTime(a.PlanDate) - getTime(b.PlanDate));
+      if (sortType === 'planDate-desc') sorted.reverse();
     }
 
     return sorted;
@@ -2863,6 +2943,14 @@ if (!entry) {
       }
       if (elements.userWiseResultsTableContainer) {
         elements.userWiseResultsTableContainer.style.display = 'none';
+      }
+      // When no data, show 0 in row count (if element exists)
+      if (elements.userWiseRowCount) {
+        const countSpan = elements.userWiseRowCount.querySelector('span strong');
+        if (countSpan) {
+          countSpan.textContent = '0';
+        }
+        elements.userWiseRowCount.style.display = 'block';
       }
       return;
     }
@@ -2941,6 +3029,10 @@ if (!entry) {
     
     // Setup checkbox event listeners
     setupUserWiseCheckboxes(data);
+    
+    // Setup column filter inputs and Plan Date header sort
+    setupUserWiseColumnFilters();
+    setupPlanDateHeaderSort();
   }
   
   // Setup checkbox functionality
@@ -3417,6 +3509,7 @@ if (!entry) {
     // Clear stored data
     window.userWiseResultsData = null;
     window.userWiseAllData = null;
+    window.userWiseHeaderSort = '';
     
     // Hide source filter section
     if (elements.userWiseSourceFilterSection) {
@@ -3482,6 +3575,9 @@ if (!entry) {
       
       // Store all data for filtering
       window.userWiseAllData = result.data || [];
+      
+      // Initialize header sort state
+      window.userWiseHeaderSort = '';
       
       // Initialize source filters (show all by default)
       if (elements.userWiseSourceFilterSection) {
@@ -3590,11 +3686,88 @@ if (!entry) {
     // User Wise Sort dropdown
     if (elements.userWiseSortPreset) {
       elements.userWiseSortPreset.addEventListener('change', () => {
+        // Clear header sort when dropdown is used
+        window.userWiseHeaderSort = '';
+        updatePlanDateSortIndicator('');
         // Re-apply filters and sorting when sort preset changes
         requestAnimationFrame(() => {
           applyUserWiseFilters();
         });
       });
+    }
+  }
+  
+  // Setup user-wise column filter inputs
+  function setupUserWiseColumnFilters() {
+    // Remove existing listeners by re-querying
+    const filterInputs = document.querySelectorAll('#user-wise-results-table .user-wise-filter-input');
+    const debouncedApplyFilters = debounce(() => applyUserWiseFilters(), 300);
+    
+    filterInputs.forEach(input => {
+      // Remove any existing listeners by cloning and replacing
+      const newInput = input.cloneNode(true);
+      input.parentNode.replaceChild(newInput, input);
+      
+      newInput.addEventListener('input', (e) => {
+        debouncedApplyFilters();
+      });
+    });
+  }
+  
+  // Setup Plan Date header sorting
+  function setupPlanDateHeaderSort() {
+    const planDateHeader = document.querySelector('#user-wise-results-table .sortable-header[data-sort-column="PlanDate"]');
+    if (planDateHeader) {
+      // Remove existing listener by cloning
+      const newHeader = planDateHeader.cloneNode(true);
+      planDateHeader.parentNode.replaceChild(newHeader, planDateHeader);
+      
+      newHeader.addEventListener('click', () => {
+        const currentSort = window.userWiseHeaderSort || '';
+        let newSort = '';
+        
+        if (currentSort === 'planDate-asc') {
+          newSort = 'planDate-desc';
+        } else {
+          newSort = 'planDate-asc';
+        }
+        
+        window.userWiseHeaderSort = newSort;
+        updatePlanDateSortIndicator(newSort);
+        
+        // Clear dropdown sort
+        if (elements.userWiseSortPreset) {
+          elements.userWiseSortPreset.value = '';
+        }
+        
+        // Re-apply filters and sorting
+        requestAnimationFrame(() => {
+          applyUserWiseFilters();
+        });
+      });
+      
+      // Update indicator based on current sort state
+      updatePlanDateSortIndicator(window.userWiseHeaderSort || '');
+    }
+  }
+  
+  // Update Plan Date sort indicator
+  function updatePlanDateSortIndicator(sortType) {
+    const planDateHeader = document.querySelector('#user-wise-results-table .sortable-header[data-sort-column="PlanDate"]');
+    if (!planDateHeader) return;
+    
+    const indicator = planDateHeader.querySelector('.sort-indicator');
+    if (!indicator) return;
+    
+    if (sortType === 'planDate-asc') {
+      indicator.textContent = '↑';
+      indicator.style.opacity = '1';
+    } else if (sortType === 'planDate-desc') {
+      indicator.textContent = '↓';
+      indicator.style.opacity = '1';
+    } else {
+      indicator.textContent = '↕';
+      indicator.style.opacity = '0.5';
     }
   }
 

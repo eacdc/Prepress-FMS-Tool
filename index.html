@@ -81,6 +81,9 @@
               <option value="jobName-desc">Job Name (Z → A)</option>
             </select>
           </div>
+          <button id="btn-clear-filters" class="btn-secondary small" type="button" style="margin-left: auto;">
+            Clear Filters
+          </button>
           <button id="btn-add-entry" class="btn-primary small">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
               <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
@@ -694,7 +697,7 @@
   <!-- User Wise Pending Results Modal -->
   <div id="user-wise-results-modal" class="modal" style="display: none;">
     <div class="modal-overlay" id="user-wise-results-modal-overlay"></div>
-    <div class="modal-content" style="max-width: 95%; max-height: 90vh; width: 1400px;">
+    <div class="modal-content" style="max-width: 98%; max-height: 90vh; width: 2000px;">
       <div class="modal-header">
         <h2 id="user-wise-results-title">User Wise Pending - <span id="user-wise-results-username"></span></h2>
         <button class="modal-close" id="user-wise-results-modal-close-btn">
@@ -731,9 +734,14 @@
                 <option value="poDate-desc">PO Date (Newest first)</option>
                 <option value="jobcard-asc">Jobcard Number (A → Z)</option>
                 <option value="jobcard-desc">Jobcard Number (Z → A)</option>
+                <option value="planDate-asc">Plan Date (Oldest first)</option>
+                <option value="planDate-desc">Plan Date (Newest first)</option>
               </select>
             </div>
           </div>
+        </div>
+        <div id="user-wise-row-count" style="display: none; padding: 0 1rem 0.5rem; font-size: 0.85rem; color: var(--text-secondary);">
+          <span><strong>0</strong> item(s) displayed</span>
         </div>
         <div id="user-wise-results-loading" class="loading-state" style="text-align: center; padding: 2rem; display: none;">
           <p>Loading pending data...</p>
@@ -765,7 +773,40 @@
                     <th>Operation</th>
                     <th>Remarks</th>
                     <th>Link</th>
-                    <th>Plan Date</th>
+                    <th class="sortable-header" data-sort-column="PlanDate" style="cursor: pointer; user-select: none;">
+                      Plan Date
+                      <span class="sort-indicator" style="margin-left: 0.25rem; font-size: 0.7rem; opacity: 0.5;">↕</span>
+                    </th>
+                  </tr>
+                  <tr class="filter-row">
+                    <th></th>
+                    <th></th>
+                    <th></th>
+                    <th>
+                      <input type="text" class="user-wise-filter-input filter-input" data-column="Jobcardnumber" placeholder="Search" style="width: 100%; padding: 0.25rem 0.4rem; font-size: 0.7rem; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px;" />
+                    </th>
+                    <th>
+                      <input type="text" class="user-wise-filter-input filter-input" data-column="Executive" placeholder="Search" style="width: 100%; padding: 0.25rem 0.4rem; font-size: 0.7rem; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px;" />
+                    </th>
+                    <th>
+                      <input type="text" class="user-wise-filter-input filter-input" data-column="ClientName" placeholder="Search" style="width: 100%; padding: 0.25rem 0.4rem; font-size: 0.7rem; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px;" />
+                    </th>
+                    <th>
+                      <input type="text" class="user-wise-filter-input filter-input" data-column="RefMISCode" placeholder="Search" style="width: 100%; padding: 0.25rem 0.4rem; font-size: 0.7rem; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px;" />
+                    </th>
+                    <th>
+                      <input type="text" class="user-wise-filter-input filter-input" data-column="JobName" placeholder="Search" style="width: 100%; padding: 0.25rem 0.4rem; font-size: 0.7rem; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px;" />
+                    </th>
+                    <th>
+                      <input type="text" class="user-wise-filter-input filter-input" data-column="Division" placeholder="Search" style="width: 100%; padding: 0.25rem 0.4rem; font-size: 0.7rem; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px;" />
+                    </th>
+                    <th></th>
+                    <th>
+                      <input type="text" class="user-wise-filter-input filter-input" data-column="Operation" placeholder="Search" style="width: 100%; padding: 0.25rem 0.4rem; font-size: 0.7rem; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px;" />
+                    </th>
+                    <th></th>
+                    <th></th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody id="user-wise-results-table-body">
