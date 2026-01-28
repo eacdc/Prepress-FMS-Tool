@@ -2902,6 +2902,7 @@ if (!entry) {
             data-index="${index}"
             data-original-value="${(item.Remarks || '').replace(/"/g, '&quot;')}"
             placeholder="Enter remark..."
+            title="${(item.Remarks || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}"
             style="width: 100%; padding: 0.25rem 0.5rem; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px; font-size: 0.7rem; min-height: 2.2rem; resize: vertical;"
           >${(item.Remarks || '').replace(/"/g, '&quot;')}</textarea>
         </td>
@@ -2986,6 +2987,21 @@ if (!entry) {
       const index = input.dataset.index;
       ['input', 'change', 'blur'].forEach(evt => {
         input.addEventListener(evt, () => syncCheckboxForIndex(index));
+      });
+      
+      // Expand textarea on focus/click to show full remark
+      input.addEventListener('focus', () => {
+        const currentValue = input.value || '';
+        if (currentValue.length > 50) {
+          input.style.minHeight = 'auto';
+          input.style.height = 'auto';
+          input.style.height = Math.max(60, Math.min(200, currentValue.split('\n').length * 20 + 20)) + 'px';
+        }
+      });
+      
+      // Update title on input to always show current value
+      input.addEventListener('input', () => {
+        input.title = input.value || '';
       });
     });
 
