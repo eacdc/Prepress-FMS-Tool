@@ -337,6 +337,7 @@
   // Field mapping: frontend field → backend field
   function mapFieldToBackend(field) {
     const fieldMap = {
+      clientName: 'ClientName',
       file: 'FileStatus',
       fileReceivedDate: 'FileReceivedDate',
       refPCC: 'RefPCC',
@@ -1265,6 +1266,7 @@
   // Note: Executive column added at index 6, so all indices after it shifted by +1
   const COLUMN_FIELD_MAP = {
     7: 'refPCC',             // Ref P.C.C...
+    8: 'clientName',         // Client Name (Mongo rows only)
     10: 'prepressPerson',      // Prepress Person (was 9)
     11: 'file',               // File (was 10)
     12: 'fileReceivedDate',   // File Received Date (was 11)
@@ -1566,6 +1568,7 @@
       const platePlanFmt = formatDateDDMMYYYY(entry.platePlan) || '';
       const plateActualFmt = formatDateDDMMYYYY(entry.plateActual) || '';
       const finallyApprovedFmt = formatBoolean(entry.finallyApproved);
+      const isMongoUnordered = entry.__SourceDB === 'MONGO_UNORDERED';
       
       return `<tr class="data-row${modifiedClass}" data-id="${entryId}">
         <td>${soDateFmt}</td>
@@ -1584,7 +1587,19 @@
             value="${(entry.refPCC || '').replace(/"/g, '&quot;')}"
           />
         </td>
-        <td>${entry.clientName || ''}</td>
+        <td>
+          ${
+            isMongoUnordered
+              ? `<input
+                  type="text"
+                  class="cell-input editable"
+                  data-field="clientName"
+                  data-col-index="8"
+                  value="${(entry.clientName || '').replace(/"/g, '&quot;')}"
+                />`
+              : (entry.clientName || '')
+          }
+        </td>
         <td>${entry.division || ''}</td>
         <td>${entry.segmentName || ''}</td>
         <td>
