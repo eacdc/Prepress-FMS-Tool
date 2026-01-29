@@ -42,7 +42,6 @@
     emptyState: document.getElementById('empty-state'),
     loadingOverlay: document.getElementById('loading-overlay'),
     btnAddEntry: document.getElementById('btn-add-entry'),
-    btnClearFilters: document.getElementById('btn-clear-filters'),
     tableSection: document.getElementById('table-section'),
     tableWrapper: document.querySelector('.table-wrapper'),
     btnViewPending: document.getElementById('btn-view-pending'),
@@ -78,6 +77,7 @@
     userWiseResultsActions: document.getElementById('user-wise-results-actions'),
     userWiseSelectedCount: document.getElementById('user-wise-selected-count'),
     userWiseUpdateBtn: document.getElementById('user-wise-update-btn'),
+    userWiseExportBtn: document.getElementById('user-wise-export-btn'),
     userWiseSelectAll: document.getElementById('user-wise-select-all'),
     userWiseUnselectAllBtn: document.getElementById('user-wise-unselect-all-btn'),
     userWiseSourceFilterSection: document.getElementById('user-wise-source-filter-section'),
@@ -1913,13 +1913,6 @@
         applyFilters(true);
       });
     }
-
-    // Clear Filters button - refresh page and clear all filters/state
-    if (elements.btnClearFilters) {
-      elements.btnClearFilters.addEventListener('click', () => {
-        window.location.reload();
-      });
-    }
   }
 
   // Initialize
@@ -3033,6 +3026,9 @@ if (!entry) {
     // Setup column filter inputs and Plan Date header sort
     setupUserWiseColumnFilters();
     setupPlanDateHeaderSort();
+    
+    // Update selected count to show/hide actions bar and buttons appropriately
+    updateSelectedCount();
   }
   
   // Setup checkbox functionality
@@ -3121,6 +3117,7 @@ if (!entry) {
     const checkboxes = elements.userWiseResultsTableBody.querySelectorAll('.user-wise-row-checkbox');
     const checkedBoxes = elements.userWiseResultsTableBody.querySelectorAll('.user-wise-row-checkbox:checked');
     const count = checkedBoxes.length;
+    const hasData = window.userWiseResultsData && window.userWiseResultsData.length > 0;
     
     if (elements.userWiseSelectedCount) {
       elements.userWiseSelectedCount.innerHTML = `<strong>${count}</strong> item(s) selected`;
@@ -3135,13 +3132,18 @@ if (!entry) {
       }
     }
     
-    // Show/hide update button and actions bar
-    if (elements.userWiseResultsActions) {
+    // Show/hide update button based on selection
+    if (elements.userWiseUpdateBtn) {
       if (count > 0) {
-        elements.userWiseResultsActions.style.display = 'block';
+        elements.userWiseUpdateBtn.style.display = 'flex';
       } else {
-        elements.userWiseResultsActions.style.display = 'none';
+        elements.userWiseUpdateBtn.style.display = 'none';
       }
+    }
+    
+    // Show actions bar when there's data (for export button), hide when no data
+    if (elements.userWiseResultsActions) {
+      elements.userWiseResultsActions.style.display = hasData ? 'block' : 'none';
     }
   }
   
@@ -3182,6 +3184,98 @@ if (!entry) {
     return selectedData;
   }
   
+  // Export user-wise table to Excel (CSV format)
+  function handleUserWiseExport() {
+    if (!window.userWiseResultsData || window.userWiseResultsData.length === 0) {
+      alert('No data to export.');
+      return;
+    }
+
+    // Define column headers matching the table
+    const headers = [
+      'PO Number',
+      'PO Date',
+      'Jobcard Number',
+      'Executive',
+      'Client Name',
+      'Ref MIS Code',
+      'Job Name',
+      'Division',
+      'File Received Date',
+      'Operation',
+      'Remarks',
+      'Link',
+      'Plan Date'
+    ];
+
+    // Helper to escape CSV values
+    function escapeCSV(value) {
+      if (value === null || value === undefined) return '';
+      const str = String(value);
+      // If contains comma, quote, or newline, wrap in quotes and escape quotes
+      if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    }
+
+    // Build CSV rows
+    const csvRows = [];
+    
+    // Add header row
+    csvRows.push(headers.map(h => escapeCSV(h)).join(','));
+
+    // Add data rows - get current values from table inputs (including edits)
+    window.userWiseResultsData.forEach((item, index) => {
+      // Get current remark and link from table inputs (may have been edited)
+      const row = elements.userWiseResultsTableBody?.querySelector(`tr[data-row-id="user-wise-row-${index}"]`);
+      const remarkInput = row?.querySelector('.user-wise-remark-input');
+      const linkInput = row?.querySelector('.user-wise-link-input');
+      
+      const currentRemark = remarkInput?.value?.trim() || item.Remarks || '';
+      const currentLink = linkInput?.value?.trim() || item.Link || '';
+
+      const rowData = [
+        item.PONumber || '',
+        formatDateDDMMMYYYY(item.PODate) || '',
+        item.Jobcardnumber || '',
+        item.Executive || '',
+        item.ClientName || '',
+        item.RefMISCode || '',
+        item.JobName || '',
+        item.Division || '',
+        formatDateDDMMMYYYY(item.FileReceivedDate) || '',
+        item.Operation || '',
+        currentRemark,
+        currentLink,
+        formatDateDDMMMYYYY(item.PlanDate) || ''
+      ];
+
+      csvRows.push(rowData.map(val => escapeCSV(val)).join(','));
+    });
+
+    // Create CSV content
+    const csvContent = csvRows.join('\n');
+
+    // Create blob and trigger download
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' }); // BOM for Excel UTF-8
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    
+    // Generate filename with username and timestamp
+    const username = elements.userWiseResultsUsername?.textContent?.trim() || 'user';
+    const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    link.download = `user-wise-pending-${username}-${timestamp}.csv`;
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    console.log(`✅ Exported ${window.userWiseResultsData.length} rows to Excel`);
+  }
+
   // Handle update button click - directly update with values from table cells
   async function handleUserWiseUpdate() {
     const selectedRows = getSelectedUserWiseRows();
@@ -3658,6 +3752,11 @@ if (!entry) {
   // User Wise Update Button
   if (elements.userWiseUpdateBtn) {
     elements.userWiseUpdateBtn.addEventListener('click', handleUserWiseUpdate);
+  }
+
+  // User Wise Export Button
+  if (elements.userWiseExportBtn) {
+    elements.userWiseExportBtn.addEventListener('click', handleUserWiseExport);
   }
   
   // User Wise Unselect All Button
