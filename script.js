@@ -42,6 +42,8 @@
     emptyState: document.getElementById('empty-state'),
     loadingOverlay: document.getElementById('loading-overlay'),
     btnAddEntry: document.getElementById('btn-add-entry'),
+    btnClearFilters: document.getElementById('btn-clear-filters'),
+    btnExportExcel: document.getElementById('btn-export-excel'),
     tableSection: document.getElementById('table-section'),
     tableWrapper: document.querySelector('.table-wrapper'),
     btnViewPending: document.getElementById('btn-view-pending'),
@@ -1192,9 +1194,23 @@
         const filterValue = value.toString().toLowerCase();
 
         if (key.includes('Date')) {
-          // Date filtering
-          const entryDate = entryValue ? formatDateDDMMYYYY(entryValue) : '';
-          if (!entryDate.toLowerCase().includes(filterValue)) {
+          // Date filtering - compare dates properly
+          // filterValue is in YYYY-MM-DD format from date input
+          // entryValue is ISO date string
+          if (!entryValue) return false;
+          
+          const entryDate = new Date(entryValue);
+          const filterDate = new Date(filterValue);
+          
+          if (isNaN(entryDate.getTime()) || isNaN(filterDate.getTime())) {
+            return false;
+          }
+          
+          // Compare dates (ignore time component)
+          const entryDateOnly = new Date(entryDate.getFullYear(), entryDate.getMonth(), entryDate.getDate());
+          const filterDateOnly = new Date(filterDate.getFullYear(), filterDate.getMonth(), filterDate.getDate());
+          
+          if (entryDateOnly.getTime() !== filterDateOnly.getTime()) {
             return false;
           }
         } else if (typeof entryValue === 'boolean') {
@@ -1221,6 +1237,9 @@
     state.pagination.currentPage = 1;
     
     renderTable();
+    
+    // Update clear filters button visibility
+    updateClearFiltersButtonVisibility();
     
     // Hide loading state if it was shown
     if (showLoadingState && elements.tableWrapper) {
@@ -1888,6 +1907,7 @@
             delete state.filters[column];
           }
           applyFilters();
+          updateClearFiltersButtonVisibility();
         });
       } else if (input.tagName === 'SELECT') {
         input.addEventListener('change', (e) => {
@@ -1897,6 +1917,7 @@
             delete state.filters[column];
           }
           applyFilters();
+          updateClearFiltersButtonVisibility();
         });
       } else {
         // Use debounced applyFilters for text inputs to avoid excessive filtering while typing
@@ -1907,6 +1928,7 @@
             delete state.filters[column];
           }
           debouncedApplyFilters();
+          updateClearFiltersButtonVisibility();
         });
       }
     });
@@ -1928,6 +1950,196 @@
         applyFilters(true);
       });
     }
+    
+    // Update clear filters button visibility when filters change
+    updateClearFiltersButtonVisibility();
+  }
+
+  // Clear all filters
+  function clearAllFilters() {
+    // Clear state filters
+    state.filters = {};
+    state.quickFilterPreset = '';
+    state.sortPreset = '';
+    
+    // Clear all filter inputs
+    const filterInputs = document.querySelectorAll('.filter-input, .filter-select, .filter-date');
+    filterInputs.forEach(input => {
+      if (input.type === 'date' || input.tagName === 'SELECT' || input.type === 'text') {
+        input.value = '';
+      }
+    });
+    
+    // Clear quick filter and sort preset
+    if (elements.quickFilterPreset) {
+      elements.quickFilterPreset.value = '';
+    }
+    if (elements.sortPreset) {
+      elements.sortPreset.value = '';
+    }
+    
+    // Reapply filters (which will show all entries)
+    applyFilters(true);
+    
+    // Hide clear button
+    updateClearFiltersButtonVisibility();
+    
+    console.log('✅ All filters cleared');
+  }
+
+  // Update clear filters button visibility based on active filters
+  function updateClearFiltersButtonVisibility() {
+    if (!elements.btnClearFilters) return;
+    
+    const hasFilters = Object.keys(state.filters).length > 0 
+      || state.quickFilterPreset 
+      || state.sortPreset;
+    
+    elements.btnClearFilters.style.display = hasFilters ? 'flex' : 'none';
+  }
+
+  // Export main table to Excel (CSV format)
+  function exportMainTableToExcel() {
+    const dataToExport = state.filteredEntries;
+    
+    if (!dataToExport || dataToExport.length === 0) {
+      alert('No data to export.');
+      return;
+    }
+
+    // Define column headers matching the main table
+    const headers = [
+      'SO Date',
+      'PO Date',
+      'SO No',
+      'PWO No',
+      'PWO Date',
+      'Job Name',
+      'Executive',
+      'Ref P.C.C...',
+      'Client Name',
+      'Division',
+      'Segment',
+      'Prepress Person',
+      'File',
+      'File Received Date',
+      'Soft Approval Reqd',
+      'Soft Approval Status',
+      'Soft Approval Sent Plan Date',
+      'Soft Approval Sent Act date',
+      'Link of Soft Approval file',
+      'Hard Approval Reqd',
+      'Hard Approval Status',
+      'Hard Approval Sent Plan Date',
+      'Hard Approval Sent Act date',
+      'MProof Approval Reqd',
+      'MProof Approval Status',
+      'MProof Approval Sent Plan Date',
+      'MProof Approval Sent Act date',
+      'Finally Approved',
+      'Finally Approved Date',
+      'Artwork Remark',
+      'Tooling Person',
+      'Tooling Die',
+      'Tooling Block',
+      'Tooling Remark',
+      'Blanket',
+      'Tooling Blanket Plan',
+      'Tooling Blanket Actual',
+      'Plate Person',
+      'Plate Output',
+      'Plate Plan',
+      'Plate Actual',
+      'Plate Remark'
+    ];
+
+    // Helper to escape CSV values
+    function escapeCSV(value) {
+      if (value === null || value === undefined) return '';
+      const str = String(value);
+      // If contains comma, quote, or newline, wrap in quotes and escape quotes
+      if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    }
+
+    // Build CSV rows
+    const csvRows = [];
+    
+    // Add header row
+    csvRows.push(headers.map(h => escapeCSV(h)).join(','));
+
+    // Add data rows
+    dataToExport.forEach(entry => {
+      const rowData = [
+        formatDateDDMMYYYY(entry.soDate) || '',
+        formatDateDDMMYYYY(entry.poDate) || '',
+        entry.soNo || '',
+        entry.pwoNo || '',
+        formatDateDDMMYYYY(entry.pwoDate) || '',
+        entry.jobName || '',
+        entry.executive || '',
+        entry.refPCC || '',
+        entry.clientName || '',
+        entry.division || '',
+        entry.segmentName || '',
+        entry.prepressPerson || '',
+        entry.file || '',
+        formatDateDDMMYYYY(entry.fileReceivedDate) || '',
+        formatBoolean(entry.softApprovalReqd) || '',
+        entry.softApprovalStatus || '',
+        formatDateDDMMYYYY(entry.softApprovalSentPlan) || '',
+        formatDateDDMMYYYY(entry.softApprovalSentAct) || '',
+        entry.softApprovalLink || '',
+        formatBoolean(entry.hardApprovalReqd) || '',
+        entry.hardApprovalStatus || '',
+        formatDateDDMMYYYY(entry.hardApprovalSentPlan) || '',
+        formatDateDDMMYYYY(entry.hardApprovalSentAct) || '',
+        formatBoolean(entry.mProofApprovalReqd) || '',
+        entry.mProofApprovalStatus || '',
+        formatDateDDMMYYYY(entry.mProofApprovalSentPlan) || '',
+        formatDateDDMMYYYY(entry.mProofApprovalSentAct) || '',
+        formatBoolean(entry.finallyApproved) || '',
+        formatDateDDMMYYYY(entry.finallyApprovedDate) || '',
+        entry.artworkRemark || '',
+        entry.toolingPerson || '',
+        entry.toolingDie || '',
+        entry.toolingBlock || '',
+        entry.toolingRemark || '',
+        entry.blanket || '',
+        formatDateDDMMYYYY(entry.toolingBlanketPlan) || '',
+        formatDateDDMMYYYY(entry.toolingBlanketActual) || '',
+        entry.platePerson || '',
+        entry.plateOutput || '',
+        formatDateDDMMYYYY(entry.platePlan) || '',
+        formatDateDDMMYYYY(entry.plateActual) || '',
+        entry.plateRemark || ''
+      ];
+
+      csvRows.push(rowData.map(val => escapeCSV(val)).join(','));
+    });
+
+    // Create CSV content
+    const csvContent = csvRows.join('\n');
+
+    // Create blob and trigger download
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' }); // BOM for Excel UTF-8
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    
+    // Generate filename with view type and timestamp
+    const viewType = state.currentView === 'pending' ? 'pending' : 'completed';
+    const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    link.download = `prepress-${viewType}-${timestamp}.csv`;
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    console.log(`✅ Exported ${dataToExport.length} rows to Excel`);
   }
 
   // Initialize
@@ -1968,6 +2180,16 @@
     // Set initial Add Entry button visibility based on current view
     if (elements.btnAddEntry) {
       elements.btnAddEntry.style.display = state.currentView === 'pending' ? 'flex' : 'none';
+    }
+    
+    // Clear filters button handler
+    if (elements.btnClearFilters) {
+      elements.btnClearFilters.addEventListener('click', clearAllFilters);
+    }
+    
+    // Export to Excel button handler
+    if (elements.btnExportExcel) {
+      elements.btnExportExcel.addEventListener('click', exportMainTableToExcel);
     }
     
     // Setup source filter checkboxes
