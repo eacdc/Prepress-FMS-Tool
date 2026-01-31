@@ -838,8 +838,10 @@ h1 {
   background: transparent !important;
   font-size: 0.7rem !important;
   padding: 0.35rem 0.35rem !important;
-  white-space: normal;
-  word-break: break-word;
+  white-space: nowrap;
+  word-break: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 #user-wise-results-modal .prepress-table thead th {
@@ -939,7 +941,7 @@ h1 {
   border-radius: 12px;
   width: 95%;
   max-width: 1300px; /* Wider for user-wise table (~130% of original) */
-  max-height: 90vh;
+  max-height: 95vh;
   display: flex;
   flex-direction: column;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
