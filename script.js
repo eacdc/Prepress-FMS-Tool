@@ -3042,8 +3042,20 @@ if (!entry) {
     
     // Use requestAnimationFrame to allow checkbox to render first, then filter
     requestAnimationFrame(() => {
-      // Filter data based on selected sources
+      // Exclude rows where FileReceivedDate is NULL/blank/""
+      const hasFileReceivedDate = (item) => {
+        const val = item.FileReceivedDate;
+        if (val === null || val === undefined) return false;
+        const str = String(val).trim();
+        return str !== '';
+      };
+
+      // Filter data: first exclude null/blank FileReceivedDate, then by selected sources and column filters
       let filteredData = window.userWiseAllData.filter(item => {
+        if (!hasFileReceivedDate(item)) {
+          return false;
+        }
+
         const sourceDb = item.__SourceDB || '';
         const site = item.Division || '';
         
