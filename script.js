@@ -3178,15 +3178,34 @@ if (!entry) {
   function renderUserWiseResultsTable(data) {
     if (!elements.userWiseResultsTableBody) return;
     
-    if (!data || data.length === 0) {
-      elements.userWiseResultsTableBody.innerHTML = '';
+    const hasLoadedData = window.userWiseAllData && window.userWiseAllData.length > 0;
+    const noRows = !data || data.length === 0;
+
+    if (noRows) {
+      // Always hide the generic empty state when we're about to show either table or filter-empty message
       if (elements.userWiseResultsEmpty) {
-        elements.userWiseResultsEmpty.style.display = 'block';
+        elements.userWiseResultsEmpty.style.display = 'none';
       }
-      if (elements.userWiseResultsTableContainer) {
-        elements.userWiseResultsTableContainer.style.display = 'none';
+      // When filters return no rows but we have loaded data: keep table visible with a placeholder row
+      if (hasLoadedData) {
+        const colCount = 14; // Select + 13 data columns
+        elements.userWiseResultsTableBody.innerHTML =
+          `<tr class="user-wise-no-match-row"><td colspan="${colCount}" style="text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.9rem;">No rows match your filters. Clear column filters or change source filters to see data.</td></tr>`;
+        if (elements.userWiseResultsTableContainer) {
+          elements.userWiseResultsTableContainer.style.display = 'block';
+        }
+      } else {
+        // No data loaded at all (e.g. initial load or no data for user): show empty state, hide table
+        elements.userWiseResultsTableBody.innerHTML = '';
+        if (elements.userWiseResultsEmpty) {
+          elements.userWiseResultsEmpty.style.display = 'block';
+          elements.userWiseResultsEmpty.innerHTML = '<p>No pending data found for this user.</p>';
+        }
+        if (elements.userWiseResultsTableContainer) {
+          elements.userWiseResultsTableContainer.style.display = 'none';
+        }
       }
-      // When no data, show 0 in row count (if element exists)
+      // When no rows, show 0 in row count
       if (elements.userWiseRowCount) {
         const countSpan = elements.userWiseRowCount.querySelector('span strong');
         if (countSpan) {
@@ -3194,9 +3213,10 @@ if (!entry) {
         }
         elements.userWiseRowCount.style.display = 'block';
       }
+      window.userWiseResultsData = [];
       return;
     }
-    
+
     if (elements.userWiseResultsEmpty) {
       elements.userWiseResultsEmpty.style.display = 'none';
     }
