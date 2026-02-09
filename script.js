@@ -1598,13 +1598,17 @@
         <td>${entry.jobName || ''}</td>
         <td>${entry.executive || ''}</td>
         <td>
-          <input
-            type="text"
-            class="cell-input editable"
-            data-field="refPCC"
-            data-col-index="7"
-            value="${(entry.refPCC || '').replace(/"/g, '&quot;')}"
-          />
+          ${
+            isMongoUnordered
+              ? `<input
+                  type="text"
+                  class="cell-input editable"
+                  data-field="refPCC"
+                  data-col-index="7"
+                  value="${(entry.refPCC || '').replace(/"/g, '&quot;')}"
+                />`
+              : (entry.refPCC || '')
+          }
         </td>
         <td>
           ${
