@@ -3246,7 +3246,7 @@ if (!entry) {
         <td>${(item.Executive || '').replace(/"/g, '&quot;')}</td>
         <td>${(item.ClientName || '').replace(/"/g, '&quot;')}</td>
         <td>${(item.RefMISCode || '').replace(/"/g, '&quot;')}</td>
-        <td>${(item.JobName || '').replace(/"/g, '&quot;')}</td>
+        <td title="${(item.JobName || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}">${(item.JobName || '').replace(/"/g, '&quot;')}</td>
         <td>${(item.Division || '').replace(/"/g, '&quot;')}</td>
         <td>${formatDateDDMMMYYYY(item.FileReceivedDate)}</td>
         <td>${(item.Operation || '').replace(/"/g, '&quot;')}</td>
