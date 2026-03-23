@@ -568,6 +568,14 @@ h1 {
   background-color: rgba(251, 191, 36, 0.25);
 }
 
+/* Final Approval = Yes but Plate Output = Pending: highlight row in red */
+.prepress-table tbody tr.data-row.row-approval-yes-plate-pending {
+  background-color: rgba(239, 68, 68, 0.35) !important;
+}
+.prepress-table tbody tr.data-row.row-approval-yes-plate-pending:hover {
+  background-color: rgba(239, 68, 68, 0.5) !important;
+}
+
 .cell-input.modified,
 .cell-select.modified {
   background-color: rgba(251, 191, 36, 0.18);

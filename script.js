@@ -32,7 +32,9 @@
       currentPage: 1,
       pageSize: 300,
       totalPages: 1
-    }
+    },
+    pendingUnorderedIds: [], // For MSSQL rows: dropdown of unordered IDs to link/cancel
+    linkDropdownSqlData: [] // For MongoDB rows: dropdown from SQL (placeholder until query provided)
   };
 
 
@@ -93,6 +95,11 @@
     paginationPageInput: document.getElementById('pagination-page-input'),
     quickFilterPreset: document.getElementById('quick-filter-preset'),
     sortPreset: document.getElementById('sort-preset'),
+    tagActions: document.getElementById('tag-actions'),
+    btnTagUnordered: document.getElementById('btn-tag-unordered'),
+    tagCount: document.getElementById('tag-count'),
+    btnUntagUnordered: document.getElementById('btn-untag-unordered'),
+    untagCount: document.getElementById('untag-count'),
     // COMMENTED OUT: Modal elements no longer used (inline editing instead)
     // userWiseUpdateModal: document.getElementById('user-wise-update-modal'),
     // userWiseUpdateModalOverlay: document.getElementById('user-wise-update-modal-overlay'),
@@ -891,6 +898,7 @@
         ? (row.RefPCC || '')  // MongoDB: use RefPCC which comes from reference
         : (row.RefProductMasterCode || row.RefPCC || row.RefNo || row.RefPCCNo || ''),
       clientName: row.ClientName || row.clientName || '',
+      linkUnordered: row.TagJobs || row.linkUnordered || '',
 
       // Division / site
       division: row.Division || row.division || row.__Site || '',
@@ -989,6 +997,24 @@
     }
   }
 
+  // Fetch dropdown data for Link Unordered column (pending view only)
+  async function fetchLinkUnorderedData() {
+    try {
+      const [idsRes, sqlRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/unordered/pending-ids`),
+        fetch(`${API_BASE_URL}/link-dropdown-data`)
+      ]);
+      const idsData = await idsRes.json();
+      const sqlData = await sqlRes.json();
+      state.pendingUnorderedIds = idsData?.ok && Array.isArray(idsData.data) ? idsData.data : [];
+      state.linkDropdownSqlData = sqlData?.ok && Array.isArray(sqlData.data) ? sqlData.data : [];
+    } catch (e) {
+      console.warn('Could not fetch link unordered dropdown data:', e);
+      state.pendingUnorderedIds = [];
+      state.linkDropdownSqlData = [];
+    }
+  }
+
   // Fetch entries from API
   async function fetchEntries() {
     try {
@@ -1005,6 +1031,10 @@
       }
 
       const raw = Array.isArray(result?.data) ? result.data : [];
+      // Fetch Link Unordered dropdown data when on pending view
+      if (state.currentView === 'pending') {
+        await fetchLinkUnorderedData();
+      }
       // console.log('📊 [API] Received', raw.length, 'pending entries');
       
       // Log first entry structure to debug ID issues
@@ -1282,28 +1312,29 @@
   }
 
   // Column mapping: index -> field name (for editable fields)
-  // Note: Executive column added at index 6, so all indices after it shifted by +1
+  // Note: Link Unordered column added at index 8
   const COLUMN_FIELD_MAP = {
     7: 'refPCC',             // Ref P.C.C...
-    8: 'clientName',         // Client Name (Mongo rows only)
-    10: 'prepressPerson',      // Prepress Person (was 9)
-    11: 'file',               // File (was 10)
-    12: 'fileReceivedDate',   // File Received Date (was 11)
-    13: 'softApprovalReqd',   // Soft Approval Reqd (was 12)
-    14: 'softApprovalStatus', // Soft Approval Status (was 13)
-    17: 'softApprovalLink',   // Link of Soft Approval file (was 16)
-    18: 'hardApprovalReqd',   // Hard Approval Reqd (was 17)
-    19: 'hardApprovalStatus', // Hard Approval Status (was 18)
-    22: 'mProofApprovalReqd', // MProof Approval Reqd (was 21)
-    23: 'mProofApprovalStatus', // MProof Approval Status (was 22)
-    28: 'artworkRemark',      // Artwork Remark (was 27)
-    29: 'toolingPerson',      // Tooling Person (was 28)
-    30: 'toolingDie',         // Tooling Die (was 29)
-    31: 'toolingBlock',       // Tooling Block (was 30)
-    32: 'toolingRemark',     // Tooling Remark (was 31)
-    33: 'blanket',            // Blanket (was 32)
-    35: 'platePerson',        // Plate Person (was 34)
-    36: 'plateOutput',        // Plate Output (was 35)
+    8: 'linkUnordered',      // Link Unordered (MSSQL: cancel unordered; Mongo: SQL dropdown)
+    9: 'clientName',         // Client Name (Mongo rows only)
+    11: 'prepressPerson',    // Prepress Person
+    12: 'file',              // File
+    13: 'fileReceivedDate',  // File Received Date
+    14: 'softApprovalReqd',   // Soft Approval Reqd
+    15: 'softApprovalStatus', // Soft Approval Status
+    18: 'softApprovalLink',   // Link of Soft Approval file
+    19: 'hardApprovalReqd',   // Hard Approval Reqd
+    20: 'hardApprovalStatus', // Hard Approval Status
+    23: 'mProofApprovalReqd', // MProof Approval Reqd
+    24: 'mProofApprovalStatus', // MProof Approval Status
+    29: 'artworkRemark',      // Artwork Remark
+    30: 'toolingPerson',      // Tooling Person
+    31: 'toolingDie',         // Tooling Die
+    32: 'toolingBlock',       // Tooling Block
+    33: 'toolingRemark',     // Tooling Remark
+    34: 'blanket',            // Blanket
+    36: 'platePerson',        // Plate Person
+    37: 'plateOutput',        // Plate Output
   };
 
   // Get entry value by column key
@@ -1489,6 +1520,49 @@
     select.value = currentValue;
   }
 
+  // Lazily create datalist options for Tag Jobs input on demand.
+  // This avoids rendering large option lists for all rows upfront.
+  function ensureLinkUnorderedOptions(input) {
+    if (!input || input.dataset.datalistReady === '1') return;
+
+    const sourceDb = input.dataset.sourceDb || '';
+    const rowKey = input.dataset.rowKey || Math.random().toString(36).slice(2);
+    const isOrderedRow = sourceDb === 'KOL_SQL' || sourceDb === 'AMD_SQL';
+    const datalistId = isOrderedRow
+      ? `unordered-token-options-${rowKey}`
+      : `jobbooking-options-${rowKey}`;
+
+    let optionsHtml = '';
+    if (isOrderedRow) {
+      const list = state.pendingUnorderedIds || [];
+      optionsHtml = list
+        .map((u) => {
+          const tokenValue = (u.tokenNumber || '').toString().replace(/"/g, '&quot;');
+          if (!tokenValue) return '';
+          return `<option value="${tokenValue}"></option>`;
+        })
+        .join('');
+    } else if (sourceDb === 'MONGO_UNORDERED') {
+      const list = state.linkDropdownSqlData || [];
+      optionsHtml = list
+        .map((item) => {
+          const val = (item.id ?? item._id ?? item.value ?? '').toString().replace(/"/g, '&quot;');
+          if (!val) return '';
+          return `<option value="${val}"></option>`;
+        })
+        .join('');
+    } else {
+      return;
+    }
+
+    const dl = document.createElement('datalist');
+    dl.id = datalistId;
+    dl.innerHTML = optionsHtml;
+    input.insertAdjacentElement('afterend', dl);
+    input.setAttribute('list', datalistId);
+    input.dataset.datalistReady = '1';
+  }
+
   // Render table
   function renderTable() {
     if (!elements.tableBody) return;
@@ -1588,8 +1662,11 @@
       const plateActualFmt = formatDateDDMMYYYY(entry.plateActual) || '';
       const finallyApprovedFmt = formatBoolean(entry.finallyApproved);
       const isMongoUnordered = entry.__SourceDB === 'MONGO_UNORDERED';
+      const finalApprovalYes = entry.finallyApproved === true || String(entry.finallyApproved || '').toLowerCase() === 'yes';
+      const plateOutputPending = String(entry.plateOutput || '').trim().toLowerCase() === 'pending';
+      const approvalYesPlatePendingClass = (finalApprovalYes && plateOutputPending) ? ' row-approval-yes-plate-pending' : '';
       
-      return `<tr class="data-row${modifiedClass}" data-id="${entryId}">
+      return `<tr class="data-row${modifiedClass}${approvalYesPlatePendingClass}" data-id="${entryId}">
         <td>${soDateFmt}</td>
         <td>${poDateFmt}</td>
         <td>${entry.soNo || ''}</td>
@@ -1612,12 +1689,45 @@
         </td>
         <td>
           ${
+            (entry.__SourceDB === 'KOL_SQL' || entry.__SourceDB === 'AMD_SQL')
+              ? (() => {
+                  return `<input
+                    type="text"
+                    class="cell-input editable"
+                    data-field="linkUnordered"
+                    data-col-index="8"
+                    data-source-db="${entry.__SourceDB || ''}"
+                    data-row-key="${actualIndex}"
+                    data-original-tag="${(entry.linkUnordered || '').replace(/"/g, '&quot;')}"
+                    value="${(entry.linkUnordered || '').replace(/"/g, '&quot;')}"
+                    placeholder="Type token (UN-...)"
+                  />`;
+                })()
+              : isMongoUnordered
+                ? (() => {
+                    return `<input
+                      type="text"
+                      class="cell-input editable"
+                      data-field="linkUnordered"
+                      data-col-index="8"
+                      data-source-db="${entry.__SourceDB || ''}"
+                      data-row-key="${actualIndex}"
+                      data-original-tag="${(entry.linkUnordered || '').replace(/"/g, '&quot;')}"
+                      value="${(entry.linkUnordered || '').replace(/"/g, '&quot;')}"
+                      placeholder="Type JobBookingNo"
+                    />`;
+                  })()
+                : '—'
+          }
+        </td>
+        <td>
+          ${
             isMongoUnordered
               ? `<input
                   type="text"
                   class="cell-input editable"
                   data-field="clientName"
-                  data-col-index="8"
+                  data-col-index="9"
                   value="${(entry.clientName || '').replace(/"/g, '&quot;')}"
                 />`
               : (entry.clientName || '')
@@ -1629,7 +1739,7 @@
           <select
             class="cell-select editable"
             data-field="prepressPerson"
-            data-col-index="10"
+            data-col-index="11"
             data-initial-value="${(entry.prepressPerson || '').replace(/"/g, '&quot;')}"
             data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
           >
@@ -1642,7 +1752,7 @@
           <select
             class="cell-select editable"
             data-field="file"
-            data-col-index="11"
+            data-col-index="12"
             data-initial-value="${(entry.file || '').replace(/"/g, '&quot;')}"
             data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
           >
@@ -1656,7 +1766,7 @@
           <select
             class="cell-select editable"
             data-field="softApprovalReqd"
-            data-col-index="13"
+            data-col-index="14"
             data-initial-value="${(entry.softApprovalReqd || '').toString().replace(/"/g, '&quot;')}"
             data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
           >
@@ -1669,7 +1779,7 @@
           <select
             class="cell-select editable"
             data-field="softApprovalStatus"
-            data-col-index="14"
+            data-col-index="15"
             data-initial-value="${(entry.softApprovalStatus || '').replace(/"/g, '&quot;')}"
             data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
           >
@@ -1685,7 +1795,7 @@
           <select
             class="cell-select editable"
             data-field="hardApprovalReqd"
-            data-col-index="18"
+            data-col-index="19"
             data-initial-value="${(entry.hardApprovalReqd || '').toString().replace(/"/g, '&quot;')}"
             data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
           >
@@ -1698,7 +1808,7 @@
           <select
             class="cell-select editable"
             data-field="hardApprovalStatus"
-            data-col-index="19"
+            data-col-index="20"
             data-initial-value="${(entry.hardApprovalStatus || '').replace(/"/g, '&quot;')}"
             data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
           >
@@ -1713,7 +1823,7 @@
           <select
             class="cell-select editable"
             data-field="mProofApprovalReqd"
-            data-col-index="22"
+            data-col-index="23"
             data-initial-value="${(entry.mProofApprovalReqd || '').toString().replace(/"/g, '&quot;')}"
             data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
           >
@@ -1726,7 +1836,7 @@
           <select
             class="cell-select editable"
             data-field="mProofApprovalStatus"
-            data-col-index="23"
+            data-col-index="24"
             data-initial-value="${(entry.mProofApprovalStatus || '').replace(/"/g, '&quot;')}"
             data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
           >
@@ -1744,7 +1854,7 @@
             type="text"
             class="cell-input editable"
             data-field="artworkRemark"
-            data-col-index="28"
+            data-col-index="29"
             value="${(entry.artworkRemark || '').replace(/"/g, '&quot;')}"
           />
         </td>
@@ -1752,7 +1862,7 @@
           <select
             class="cell-select editable"
             data-field="toolingPerson"
-            data-col-index="29"
+            data-col-index="30"
             data-initial-value="${(entry.toolingPerson || '').replace(/"/g, '&quot;')}"
             data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
           >
@@ -1765,7 +1875,7 @@
           <select
             class="cell-select editable"
             data-field="toolingDie"
-            data-col-index="30"
+            data-col-index="31"
             data-initial-value="${(entry.toolingDie || '').replace(/"/g, '&quot;')}"
             data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
           >
@@ -1778,7 +1888,7 @@
           <select
             class="cell-select editable"
             data-field="toolingBlock"
-            data-col-index="31"
+            data-col-index="32"
             data-initial-value="${(entry.toolingBlock || '').replace(/"/g, '&quot;')}"
             data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
           >
@@ -1792,7 +1902,7 @@
           <select
             class="cell-select editable"
             data-field="blanket"
-            data-col-index="33"
+            data-col-index="34"
             data-initial-value="${(entry.blanket || '').replace(/"/g, '&quot;')}"
             data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
           >
@@ -1807,7 +1917,7 @@
           <select
             class="cell-select editable"
             data-field="platePerson"
-            data-col-index="35"
+            data-col-index="36"
             data-initial-value="${(entry.platePerson || '').replace(/"/g, '&quot;')}"
             data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
           >
@@ -1820,7 +1930,7 @@
           <select
             class="cell-select editable"
             data-field="plateOutput"
-            data-col-index="36"
+            data-col-index="37"
             data-initial-value="${(entry.plateOutput || '').replace(/"/g, '&quot;')}"
             data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
           >
@@ -1836,6 +1946,186 @@
     }).join('');
 
     elements.tableBody.innerHTML = rowsHtml;
+    updateTagBarVisibility();
+  }
+
+  /** Resolve grid row to entry by tr data-id (same logic as handleCellEdit). */
+  function findEntryByRowId(rowId) {
+    const rowIdStr = String(rowId);
+    const searchArrays = [state.filteredEntries, state.entries];
+    for (const searchArray of searchArrays) {
+      const entry = searchArray.find((e) => {
+        const possibleIds = [
+          e.__raw?._id,
+          e.__raw?.__MongoId,
+          e._id,
+          e.__MongoId,
+          e.OrderBookingDetailsID?.toString(),
+        ]
+          .filter(Boolean)
+          .map((id) => String(id));
+        return possibleIds.some((id) => id === rowIdStr);
+      });
+      if (entry) return entry;
+    }
+    return null;
+  }
+
+  /** Show bottom Tag bar and compute tag/untag counts from current Tag Jobs edits. */
+  function updateTagBarVisibility() {
+    if (!elements.tableBody) return;
+    if (state.currentView !== 'pending') {
+      if (elements.tagActions) elements.tagActions.style.display = 'none';
+      return;
+    }
+    const inputs = elements.tableBody.querySelectorAll('input[data-field="linkUnordered"]');
+    let tagCount = 0;
+    let untagCount = 0;
+    inputs.forEach((inp) => {
+      const current = (inp.value || '').trim();
+      const original = (inp.dataset.originalTag || '').trim();
+      if (current && current !== original) tagCount += 1;
+      if (!current && original) untagCount += 1;
+    });
+    if (elements.tagActions) {
+      elements.tagActions.style.display = (tagCount > 0 || untagCount > 0) ? 'flex' : 'none';
+    }
+    if (elements.tagCount) {
+      elements.tagCount.textContent = String(tagCount);
+    }
+    if (elements.untagCount) {
+      elements.untagCount.textContent = String(untagCount);
+    }
+    if (elements.btnTagUnordered) {
+      elements.btnTagUnordered.style.display = tagCount > 0 ? '' : 'none';
+    }
+    if (elements.btnUntagUnordered) {
+      elements.btnUntagUnordered.style.display = untagCount > 0 ? '' : 'none';
+    }
+  }
+
+  /** Apply all pending tags: batch-update MongoDB ArtworkUnordered (iscancelled + tagedJobNo). */
+  async function submitUnorderedTags() {
+    if (!elements.tableBody) return;
+    const inputs = elements.tableBody.querySelectorAll('input[data-field="linkUnordered"]');
+    const items = [];
+    const problems = [];
+    for (const inp of inputs) {
+      const typedValue = (inp.value || '').trim();
+      if (!typedValue) continue;
+      const original = (inp.dataset.originalTag || '').trim();
+      if (typedValue === original) continue;
+      const tr = inp.closest('tr');
+      const rowId = tr?.getAttribute('data-id');
+      if (!rowId) continue;
+      const entry = findEntryByRowId(rowId);
+      const sourceDb = entry?.__raw?.__SourceDB || entry?.__SourceDB;
+
+      // Ordered rows: user types/selects unordered token; find Mongo doc by token
+      if (sourceDb === 'KOL_SQL' || sourceDb === 'AMD_SQL') {
+        const matched = (state.pendingUnorderedIds || []).find((u) =>
+          String(u.tokenNumber || '').trim().toLowerCase() === typedValue.toLowerCase()
+        );
+        if (!matched?._id) {
+          problems.push(typedValue);
+          continue;
+        }
+        const tagedJobNo = entry.pwoNo || entry.soNo || '';
+        items.push({ mongoId: matched._id, tagedJobNo });
+        continue;
+      }
+
+      // Mongo unordered rows: user types/selects ordered JobBookingNo directly
+      if (sourceDb === 'MONGO_UNORDERED') {
+        const mongoId = entry.__MongoId || entry.__raw?._id || entry.__raw?.__MongoId;
+        if (!mongoId) {
+          problems.push(typedValue);
+          continue;
+        }
+        items.push({ mongoId: String(mongoId), tagedJobNo: typedValue });
+      }
+    }
+    if (problems.length) {
+      alert(`Invalid tag value(s): ${problems.join(', ')}`);
+      return;
+    }
+    if (items.length === 0) {
+      alert('Enter at least one value in Tag Jobs column.');
+      return;
+    }
+    showLoading();
+    try {
+      const res = await fetch(`${API_BASE_URL}/unordered/tag-batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Tag failed');
+      const msg =
+        `Tagged ${data.success} unordered approval(s).` +
+        (data.failed ? ` (${data.failed} failed)` : '');
+      alert(msg);
+      await fetchEntries();
+      updateTagBarVisibility();
+    } catch (err) {
+      alert(err.message || 'Tag failed');
+    } finally {
+      hideLoading();
+    }
+  }
+
+  /** Apply all pending untags: reset iscancelled to 0 and clear tagedJobNo. */
+  async function submitUnorderedUntags() {
+    if (!elements.tableBody) return;
+    const inputs = elements.tableBody.querySelectorAll('input[data-field="linkUnordered"]');
+    const items = [];
+    for (const inp of inputs) {
+      const current = (inp.value || '').trim();
+      const original = (inp.dataset.originalTag || '').trim();
+      if (current || !original) continue; // untag only when user cleared existing tag
+      const tr = inp.closest('tr');
+      const rowId = tr?.getAttribute('data-id');
+      if (!rowId) continue;
+      const entry = findEntryByRowId(rowId);
+      const sourceDb = entry?.__raw?.__SourceDB || entry?.__SourceDB;
+
+      if (sourceDb === 'KOL_SQL' || sourceDb === 'AMD_SQL') {
+        const tagedJobNo = entry.pwoNo || entry.soNo || '';
+        if (tagedJobNo) items.push({ tagedJobNo });
+        continue;
+      }
+      if (sourceDb === 'MONGO_UNORDERED') {
+        const mongoId = entry.__MongoId || entry.__raw?._id || entry.__raw?.__MongoId;
+        if (mongoId) items.push({ mongoId: String(mongoId) });
+      }
+    }
+
+    if (items.length === 0) {
+      alert('No rows selected for untag.');
+      return;
+    }
+
+    showLoading();
+    try {
+      const res = await fetch(`${API_BASE_URL}/unordered/untag-batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'UnTag failed');
+      const msg =
+        `UnTagged ${data.success} approval(s).` +
+        (data.failed ? ` (${data.failed} failed)` : '');
+      alert(msg);
+      await fetchEntries();
+      updateTagBarVisibility();
+    } catch (err) {
+      alert(err.message || 'UnTag failed');
+    } finally {
+      hideLoading();
+    }
   }
 
   // Update pagination controls
@@ -2021,6 +2311,7 @@
       'Job Name',
       'Executive',
       'Ref P.C.C...',
+      'Tag Jobs',
       'Client Name',
       'Division',
       'Segment',
@@ -2085,6 +2376,7 @@
         entry.jobName || '',
         entry.executive || '',
         entry.refPCC || '',
+        entry.linkUnordered || '',
         entry.clientName || '',
         entry.division || '',
         entry.segmentName || '',
@@ -2232,17 +2524,35 @@
       // Lazily populate dropdown options when selects receive focus
       elements.tableBody.addEventListener('focusin', (e) => {
         const select = e.target.closest('.cell-select.editable');
-        if (!select) return;
-        ensureDropdownOptions(select);
+        if (select) {
+          ensureDropdownOptions(select);
+          return;
+        }
+        const tagInput = e.target.closest('input.cell-input.editable[data-field="linkUnordered"]');
+        if (tagInput) {
+          ensureLinkUnorderedOptions(tagInput);
+        }
       });
 
       // Handle both change and input events for better UX
       elements.tableBody.addEventListener('change', handleCellEdit);
       elements.tableBody.addEventListener('blur', handleCellEdit, true); // Use capture for inputs
+      elements.tableBody.addEventListener('input', (e) => {
+        if (e.target && e.target.matches && e.target.matches('input[data-field="linkUnordered"]')) {
+          updateTagBarVisibility();
+        }
+      });
 
       // console.log('✅ [INIT] Edit handlers attached to table body');
     } else {
       // console.error('❌ [INIT] Table body element not found!');
+    }
+
+    if (elements.btnTagUnordered) {
+      elements.btnTagUnordered.addEventListener('click', submitUnorderedTags);
+    }
+    if (elements.btnUntagUnordered) {
+      elements.btnUntagUnordered.addEventListener('click', submitUnorderedUntags);
     }
 
     function handleCellEdit(e) {
@@ -2407,6 +2717,13 @@ if (!entry) {
 
       // console.log('📝 [EDIT] Field:', field, '| Value:', newValue, '| Row:', rowId);
 
+      // Tag Jobs (ordered + unordered rows): staging only — Mongo updates when user clicks Tag
+      const sourceDb = entry.__raw?.__SourceDB || entry.__SourceDB;
+      if (field === 'linkUnordered' && (sourceDb === 'KOL_SQL' || sourceDb === 'AMD_SQL' || sourceDb === 'MONGO_UNORDERED')) {
+        updateTagBarVisibility();
+        return;
+      }
+
       // Capture old value before change (for derived logic)
       const oldValue = entry[field];
 
@@ -2418,7 +2735,6 @@ if (!entry) {
 
       // For SQL data: When person dropdown changes, immediately update the corresponding ID field
       const personFields = ['prepressPerson', 'toolingPerson', 'platePerson'];
-      const sourceDb = entry.__raw?.__SourceDB || entry.__SourceDB;
 
       if (personFields.includes(field) && (sourceDb === 'KOL_SQL' || sourceDb === 'AMD_SQL')) {
         // For SQL data, convert displayName to ledgerId and update the ID field
