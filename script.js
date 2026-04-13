@@ -63,6 +63,7 @@
     formTokenPreview: document.getElementById('form-token-preview'),
     formTokenValue: document.getElementById('form-token-value'),
     btnUserWisePending: document.getElementById('btn-user-wise-pending'),
+    btnUserWiseCompleted: document.getElementById('btn-user-wise-completed'),
     userWisePendingModal: document.getElementById('user-wise-pending-modal'),
     userWiseModalOverlay: document.getElementById('user-wise-modal-overlay'),
     userWiseModalCloseBtn: document.getElementById('user-wise-modal-close-btn'),
@@ -88,6 +89,28 @@
     userWiseResultsFiltering: document.getElementById('user-wise-results-filtering'),
     userWiseRowCount: document.getElementById('user-wise-row-count'),
     userWiseSortPreset: document.getElementById('user-wise-sort-preset'),
+    userWiseCompletedModal: document.getElementById('user-wise-completed-modal'),
+    userWiseCompletedModalOverlay: document.getElementById('user-wise-completed-modal-overlay'),
+    userWiseCompletedModalCloseBtn: document.getElementById('user-wise-completed-modal-close-btn'),
+    userWiseCompletedCancelBtn: document.getElementById('user-wise-completed-cancel-btn'),
+    userWiseCompletedGetBtn: document.getElementById('user-wise-completed-get-btn'),
+    userWiseCompletedSelect: document.getElementById('user-wise-completed-select'),
+    userWiseCompletedFromDate: document.getElementById('user-wise-completed-from-date'),
+    userWiseCompletedToDate: document.getElementById('user-wise-completed-to-date'),
+    userWiseCompletedResultsModal: document.getElementById('user-wise-completed-results-modal'),
+    userWiseCompletedResultsModalOverlay: document.getElementById('user-wise-completed-results-modal-overlay'),
+    userWiseCompletedResultsModalCloseBtn: document.getElementById('user-wise-completed-results-modal-close-btn'),
+    userWiseCompletedResultsUsername: document.getElementById('user-wise-completed-results-username'),
+    userWiseCompletedResultsLoading: document.getElementById('user-wise-completed-results-loading'),
+    userWiseCompletedResultsEmpty: document.getElementById('user-wise-completed-results-empty'),
+    userWiseCompletedResultsFiltering: document.getElementById('user-wise-completed-results-filtering'),
+    userWiseCompletedResultsTableContainer: document.getElementById('user-wise-completed-results-table-container'),
+    userWiseCompletedResultsTableBody: document.getElementById('user-wise-completed-results-table-body'),
+    userWiseCompletedSourceFilterSection: document.getElementById('user-wise-completed-source-filter-section'),
+    userWiseCompletedResultsActions: document.getElementById('user-wise-completed-results-actions'),
+    userWiseCompletedExportBtn: document.getElementById('user-wise-completed-export-btn'),
+    userWiseCompletedRowCount: document.getElementById('user-wise-completed-row-count'),
+    userWiseCompletedSortPreset: document.getElementById('user-wise-completed-sort-preset'),
     paginationContainer: document.getElementById('pagination-container'),
     paginationInfo: document.getElementById('pagination-info'),
     paginationPrev: document.getElementById('pagination-prev'),
@@ -4299,6 +4322,363 @@ if (!entry) {
     }
   }
 
+  async function openUserWiseCompletedModal() {
+    if (!elements.userWiseCompletedModal || !elements.userWiseCompletedSelect) return;
+
+    elements.userWiseCompletedModal.style.display = 'flex';
+    const today = new Date().toISOString().slice(0, 10);
+    if (elements.userWiseCompletedToDate && !elements.userWiseCompletedToDate.value) {
+      elements.userWiseCompletedToDate.value = today;
+    }
+
+    try {
+      elements.userWiseCompletedSelect.innerHTML = '<option value="">Loading users...</option>';
+      elements.userWiseCompletedSelect.disabled = true;
+      elements.userWiseCompletedGetBtn.disabled = true;
+
+      const response = await fetch(`${API_BASE_URL}/users`);
+      const result = await response.json();
+      if (!response.ok || !result.ok || !result.data) {
+        throw new Error(result.error || `HTTP ${response.status}`);
+      }
+
+      elements.userWiseCompletedSelect.innerHTML = '<option value="">Select User</option>';
+      const sortedUsers = [...result.data].sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
+      sortedUsers.forEach((user) => {
+        const option = document.createElement('option');
+        option.value = user.userKey || user._id;
+        option.textContent = user.displayName || user.userKey;
+        option.setAttribute('data-display-name', user.displayName || '');
+        elements.userWiseCompletedSelect.appendChild(option);
+      });
+      elements.userWiseCompletedSelect.disabled = false;
+      handleUserWiseCompletedInputChange();
+    } catch (error) {
+      elements.userWiseCompletedSelect.innerHTML = '<option value="">Error loading users</option>';
+      alert(`Failed to load users: ${error.message}`);
+    }
+  }
+
+  function closeUserWiseCompletedModal() {
+    if (!elements.userWiseCompletedModal) return;
+    elements.userWiseCompletedModal.style.display = 'none';
+    if (elements.userWiseCompletedSelect) elements.userWiseCompletedSelect.value = '';
+    if (elements.userWiseCompletedFromDate) elements.userWiseCompletedFromDate.value = '';
+    if (elements.userWiseCompletedGetBtn) elements.userWiseCompletedGetBtn.disabled = true;
+  }
+
+  function handleUserWiseCompletedInputChange() {
+    if (!elements.userWiseCompletedGetBtn) return;
+    const hasUser = Boolean(elements.userWiseCompletedSelect && elements.userWiseCompletedSelect.value);
+    const hasFrom = Boolean(elements.userWiseCompletedFromDate && elements.userWiseCompletedFromDate.value);
+    const hasTo = Boolean(elements.userWiseCompletedToDate && elements.userWiseCompletedToDate.value);
+    const validRange = !hasFrom || !hasTo
+      ? false
+      : new Date(elements.userWiseCompletedFromDate.value) <= new Date(elements.userWiseCompletedToDate.value);
+    elements.userWiseCompletedGetBtn.disabled = !(hasUser && hasFrom && hasTo && validRange);
+  }
+
+  function openUserWiseCompletedResultsModal(username) {
+    if (!elements.userWiseCompletedResultsModal) return;
+    document.body.classList.add('user-wise-modal-open');
+    if (elements.userWiseCompletedResultsUsername) {
+      elements.userWiseCompletedResultsUsername.textContent = username;
+    }
+    if (elements.userWiseCompletedResultsLoading) elements.userWiseCompletedResultsLoading.style.display = 'block';
+    if (elements.userWiseCompletedResultsFiltering) elements.userWiseCompletedResultsFiltering.style.display = 'none';
+    if (elements.userWiseCompletedResultsEmpty) elements.userWiseCompletedResultsEmpty.style.display = 'none';
+    if (elements.userWiseCompletedResultsTableContainer) elements.userWiseCompletedResultsTableContainer.style.display = 'none';
+    if (elements.userWiseCompletedSourceFilterSection) elements.userWiseCompletedSourceFilterSection.style.display = 'none';
+    elements.userWiseCompletedResultsModal.style.display = 'flex';
+  }
+
+  function closeUserWiseCompletedResultsModal() {
+    if (!elements.userWiseCompletedResultsModal) return;
+    elements.userWiseCompletedResultsModal.style.display = 'none';
+    document.body.classList.remove('user-wise-modal-open');
+    window.userWiseCompletedAllData = null;
+    window.userWiseCompletedResultsData = null;
+    window.userWiseCompletedHeaderSort = '';
+  }
+
+  function applyUserWiseCompletedSortPreset(list) {
+    if (!Array.isArray(list)) return [];
+    const preset = elements.userWiseCompletedSortPreset ? (elements.userWiseCompletedSortPreset.value || '') : '';
+    const headerSort = window.userWiseCompletedHeaderSort || '';
+    const sortType = headerSort || preset;
+    if (!sortType) return list.slice();
+
+    const sorted = list.slice();
+    const getTime = (value) => {
+      if (!value) return 0;
+      const t = new Date(value).getTime();
+      return Number.isNaN(t) ? 0 : t;
+    };
+
+    if (sortType === 'poDate-asc' || sortType === 'poDate-desc') {
+      sorted.sort((a, b) => getTime(a.PODate) - getTime(b.PODate));
+      if (sortType === 'poDate-desc') sorted.reverse();
+    } else if (sortType === 'jobcard-asc' || sortType === 'jobcard-desc') {
+      sorted.sort((a, b) => (a.Jobcardnumber || '').localeCompare(b.Jobcardnumber || ''));
+      if (sortType === 'jobcard-desc') sorted.reverse();
+    } else if (sortType === 'planDate-asc' || sortType === 'planDate-desc') {
+      sorted.sort((a, b) => getTime(a.PlanDate) - getTime(b.PlanDate));
+      if (sortType === 'planDate-desc') sorted.reverse();
+    }
+    return sorted;
+  }
+
+  function renderUserWiseCompletedResultsTable(data) {
+    if (!elements.userWiseCompletedResultsTableBody) return;
+    const hasLoadedData = window.userWiseCompletedAllData && window.userWiseCompletedAllData.length > 0;
+    const noRows = !data || data.length === 0;
+
+    if (noRows) {
+      if (elements.userWiseCompletedResultsEmpty) elements.userWiseCompletedResultsEmpty.style.display = hasLoadedData ? 'none' : 'block';
+      if (hasLoadedData) {
+        elements.userWiseCompletedResultsTableBody.innerHTML = '<tr><td colspan="14" style="text-align:center;padding:2rem;color:var(--text-muted);font-size:0.9rem;">No rows match your filters. Clear column filters or change source filters to see data.</td></tr>';
+        if (elements.userWiseCompletedResultsTableContainer) elements.userWiseCompletedResultsTableContainer.style.display = 'block';
+      } else {
+        elements.userWiseCompletedResultsTableBody.innerHTML = '';
+        if (elements.userWiseCompletedResultsTableContainer) elements.userWiseCompletedResultsTableContainer.style.display = 'none';
+      }
+      if (elements.userWiseCompletedResultsActions) elements.userWiseCompletedResultsActions.style.display = 'none';
+      if (elements.userWiseCompletedRowCount) {
+        const countSpan = elements.userWiseCompletedRowCount.querySelector('span strong');
+        if (countSpan) countSpan.textContent = '0';
+        elements.userWiseCompletedRowCount.style.display = 'block';
+      }
+      window.userWiseCompletedResultsData = [];
+      return;
+    }
+
+    const rowsHtml = data.map((item) => `<tr>
+      <td>${(item.PONumber || '').replace(/"/g, '&quot;')}</td>
+      <td>${formatDateDDMMMYYYY(item.PODate)}</td>
+      <td>${(item.Jobcardnumber || '').replace(/"/g, '&quot;')}</td>
+      <td>${(item.Executive || '').replace(/"/g, '&quot;')}</td>
+      <td>${(item.ClientName || '').replace(/"/g, '&quot;')}</td>
+      <td>${(item.RefMISCode || '').replace(/"/g, '&quot;')}</td>
+      <td title="${(item.JobName || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}">${(item.JobName || '').replace(/"/g, '&quot;')}</td>
+      <td>${(item.Division || '').replace(/"/g, '&quot;')}</td>
+      <td>${formatDateDDMMMYYYY(item.FileReceivedDate)}</td>
+      <td>${(item.Operation || '').replace(/"/g, '&quot;')}</td>
+      <td title="${(item.Remarks || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}">${(item.Remarks || '').replace(/"/g, '&quot;')}</td>
+      <td>${(item.Link || '').replace(/"/g, '&quot;')}</td>
+      <td>${formatDateDDMMMYYYY(item.PlanDate)}</td>
+      <td>${formatDateDDMMMYYYY(item.ActualDate)}</td>
+    </tr>`).join('');
+
+    elements.userWiseCompletedResultsTableBody.innerHTML = rowsHtml;
+    if (elements.userWiseCompletedResultsEmpty) elements.userWiseCompletedResultsEmpty.style.display = 'none';
+    if (elements.userWiseCompletedResultsTableContainer) elements.userWiseCompletedResultsTableContainer.style.display = 'block';
+    if (elements.userWiseCompletedSourceFilterSection) elements.userWiseCompletedSourceFilterSection.style.display = 'block';
+    if (elements.userWiseCompletedResultsActions) elements.userWiseCompletedResultsActions.style.display = 'block';
+    if (elements.userWiseCompletedRowCount) {
+      const countSpan = elements.userWiseCompletedRowCount.querySelector('span strong');
+      if (countSpan) countSpan.textContent = String(data.length);
+      elements.userWiseCompletedRowCount.style.display = 'block';
+    }
+    window.userWiseCompletedResultsData = data;
+    setupUserWiseCompletedColumnFilters();
+    setupCompletedPlanDateHeaderSort();
+  }
+
+  function applyUserWiseCompletedFilters() {
+    if (!window.userWiseCompletedAllData || window.userWiseCompletedAllData.length === 0) {
+      renderUserWiseCompletedResultsTable([]);
+      return;
+    }
+    if (elements.userWiseCompletedResultsFiltering) elements.userWiseCompletedResultsFiltering.style.display = 'block';
+    if (elements.userWiseCompletedResultsTableContainer) elements.userWiseCompletedResultsTableContainer.style.display = 'none';
+
+    const selectedSources = [];
+    const checkboxes = elements.userWiseCompletedSourceFilterSection?.querySelectorAll('[data-source]') || [];
+    checkboxes.forEach((cb) => {
+      if (cb.checked) selectedSources.push(cb.dataset.source);
+    });
+
+    const columnFilters = {};
+    const filterInputs = document.querySelectorAll('#user-wise-completed-results-table .user-wise-completed-filter-input');
+    filterInputs.forEach((input) => {
+      const column = input.dataset.column;
+      const value = input.value.trim();
+      if (column && value) columnFilters[column] = value;
+    });
+
+    requestAnimationFrame(() => {
+      let filteredData = window.userWiseCompletedAllData.filter((item) => {
+        const sourceDb = item.__SourceDB || '';
+        const site = item.Division || '';
+        let matchesSource = false;
+        for (const sourceFilter of selectedSources) {
+          if (sourceFilter === 'KOLKATA' && (sourceDb === 'KOL_SQL' || site.toUpperCase() === 'KOLKATA')) matchesSource = true;
+          if (sourceFilter === 'AHMEDABAD' && (sourceDb === 'AMD_SQL' || site.toUpperCase() === 'AHMEDABAD')) matchesSource = true;
+          if (sourceFilter === 'UNORDERED' && sourceDb === 'MONGO_UNORDERED') matchesSource = true;
+        }
+        if (!matchesSource) return false;
+        for (const [column, filterValue] of Object.entries(columnFilters)) {
+          if (!(item[column] || '').toString().toLowerCase().includes(filterValue.toLowerCase())) return false;
+        }
+        return true;
+      });
+
+      filteredData = applyUserWiseCompletedSortPreset(filteredData);
+      if (elements.userWiseCompletedResultsFiltering) elements.userWiseCompletedResultsFiltering.style.display = 'none';
+      renderUserWiseCompletedResultsTable(filteredData);
+    });
+  }
+
+  function setupUserWiseCompletedColumnFilters() {
+    const filterInputs = document.querySelectorAll('#user-wise-completed-results-table .user-wise-completed-filter-input');
+    const debouncedApplyFilters = debounce(() => applyUserWiseCompletedFilters(), 300);
+    filterInputs.forEach((input) => {
+      if (input.dataset.boundCompletedFilter === '1') return;
+      input.addEventListener('input', () => debouncedApplyFilters());
+      input.dataset.boundCompletedFilter = '1';
+    });
+  }
+
+  function updateCompletedPlanDateSortIndicator(sortType) {
+    const planDateHeader = document.querySelector('#user-wise-completed-results-table .sortable-header[data-sort-column="PlanDate"]');
+    if (!planDateHeader) return;
+    const indicator = planDateHeader.querySelector('.sort-indicator');
+    if (!indicator) return;
+    if (sortType === 'planDate-asc') {
+      indicator.textContent = '↑';
+      indicator.style.opacity = '1';
+    } else if (sortType === 'planDate-desc') {
+      indicator.textContent = '↓';
+      indicator.style.opacity = '1';
+    } else {
+      indicator.textContent = '↕';
+      indicator.style.opacity = '0.5';
+    }
+  }
+
+  function setupCompletedPlanDateHeaderSort() {
+    const planDateHeader = document.querySelector('#user-wise-completed-results-table .sortable-header[data-sort-column="PlanDate"]');
+    if (!planDateHeader) return;
+    const newHeader = planDateHeader.cloneNode(true);
+    planDateHeader.parentNode.replaceChild(newHeader, planDateHeader);
+    newHeader.addEventListener('click', () => {
+      const currentSort = window.userWiseCompletedHeaderSort || '';
+      const newSort = currentSort === 'planDate-asc' ? 'planDate-desc' : 'planDate-asc';
+      window.userWiseCompletedHeaderSort = newSort;
+      updateCompletedPlanDateSortIndicator(newSort);
+      if (elements.userWiseCompletedSortPreset) elements.userWiseCompletedSortPreset.value = '';
+      requestAnimationFrame(() => applyUserWiseCompletedFilters());
+    });
+    updateCompletedPlanDateSortIndicator(window.userWiseCompletedHeaderSort || '');
+  }
+
+  function handleUserWiseCompletedExport() {
+    const data = window.userWiseCompletedResultsData || [];
+    if (!data.length) {
+      alert('No data to export.');
+      return;
+    }
+
+    const headers = ['PO Number', 'PO Date', 'Jobcard Number', 'Executive', 'Client Name', 'Ref MIS Code', 'Job Name', 'Division', 'File Received Date', 'Operation', 'Remarks', 'Link', 'Plan Date', 'Actual Date'];
+    const escapeCSV = (value) => {
+      if (value === null || value === undefined) return '';
+      const str = String(value);
+      if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+        return `"${str.replace(/"/g, '""')}"`;
+      }
+      return str;
+    };
+
+    const csvRows = [headers.map((h) => escapeCSV(h)).join(',')];
+    data.forEach((item) => {
+      csvRows.push([
+        item.PONumber || '',
+        formatDateDDMMMYYYY(item.PODate) || '',
+        item.Jobcardnumber || '',
+        item.Executive || '',
+        item.ClientName || '',
+        item.RefMISCode || '',
+        item.JobName || '',
+        item.Division || '',
+        formatDateDDMMMYYYY(item.FileReceivedDate) || '',
+        item.Operation || '',
+        item.Remarks || '',
+        item.Link || '',
+        formatDateDDMMMYYYY(item.PlanDate) || '',
+        formatDateDDMMMYYYY(item.ActualDate) || '',
+      ].map((v) => escapeCSV(v)).join(','));
+    });
+
+    const blob = new Blob(['\ufeff' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const username = elements.userWiseCompletedResultsUsername?.textContent?.trim() || 'user';
+    const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    link.download = `user-wise-completed-${username}-${timestamp}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleUserWiseCompletedGet() {
+    if (!elements.userWiseCompletedSelect || !elements.userWiseCompletedSelect.value) {
+      alert('Please select a user first');
+      return;
+    }
+    const fromDate = elements.userWiseCompletedFromDate?.value || '';
+    const toDate = elements.userWiseCompletedToDate?.value || '';
+    if (!fromDate || !toDate) {
+      alert('Please select from and to date.');
+      return;
+    }
+    if (new Date(fromDate) > new Date(toDate)) {
+      alert('From Date cannot be greater than To Date.');
+      return;
+    }
+
+    const selectedOption = elements.userWiseCompletedSelect.options[elements.userWiseCompletedSelect.selectedIndex];
+    const displayName = selectedOption.getAttribute('data-display-name') || selectedOption.textContent;
+
+    try {
+      closeUserWiseCompletedModal();
+      showLoading();
+      openUserWiseCompletedResultsModal(displayName);
+      const prepressApiBaseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? 'http://localhost:3001/api/prepress'
+        : 'https://cdcapi.onrender.com/api/prepress';
+      const apiUrl = `${prepressApiBaseUrl}/completed?username=${encodeURIComponent(displayName)}&fromDate=${encodeURIComponent(fromDate)}&toDate=${encodeURIComponent(toDate)}`;
+      const response = await fetch(apiUrl);
+      const result = await response.json();
+      if (!response.ok || !result.ok) {
+        throw new Error(result.error || `HTTP ${response.status}`);
+      }
+
+      window.userWiseCompletedAllData = result.data || [];
+      window.userWiseCompletedHeaderSort = '';
+      if (elements.userWiseCompletedSourceFilterSection) {
+        const filterCheckboxes = elements.userWiseCompletedSourceFilterSection.querySelectorAll('[data-source]');
+        filterCheckboxes.forEach((cb) => {
+          cb.checked = true;
+        });
+      }
+      applyUserWiseCompletedFilters();
+      if (elements.userWiseCompletedResultsLoading) elements.userWiseCompletedResultsLoading.style.display = 'none';
+    } catch (error) {
+      if (elements.userWiseCompletedResultsLoading) elements.userWiseCompletedResultsLoading.style.display = 'none';
+      if (elements.userWiseCompletedResultsEmpty) {
+        elements.userWiseCompletedResultsEmpty.style.display = 'block';
+        elements.userWiseCompletedResultsEmpty.innerHTML = `<p>Error: ${error.message}</p>`;
+      }
+      if (elements.userWiseCompletedResultsTableContainer) {
+        elements.userWiseCompletedResultsTableContainer.style.display = 'none';
+      }
+    } finally {
+      hideLoading();
+    }
+  }
+
   // Event Listeners
   if (elements.btnAddEntry) {
     elements.btnAddEntry.addEventListener('click', openAddEntryModal);
@@ -4307,6 +4687,9 @@ if (!entry) {
   // User Wise Pending Modal Event Listeners
   if (elements.btnUserWisePending) {
     elements.btnUserWisePending.addEventListener('click', openUserWisePendingModal);
+  }
+  if (elements.btnUserWiseCompleted) {
+    elements.btnUserWiseCompleted.addEventListener('click', openUserWiseCompletedModal);
   }
 
   if (elements.userWiseModalCloseBtn) {
@@ -4328,6 +4711,27 @@ if (!entry) {
   if (elements.userWiseSelect) {
     elements.userWiseSelect.addEventListener('change', handleUserWiseSelectChange);
   }
+  if (elements.userWiseCompletedSelect) {
+    elements.userWiseCompletedSelect.addEventListener('change', handleUserWiseCompletedInputChange);
+  }
+  if (elements.userWiseCompletedFromDate) {
+    elements.userWiseCompletedFromDate.addEventListener('change', handleUserWiseCompletedInputChange);
+  }
+  if (elements.userWiseCompletedToDate) {
+    elements.userWiseCompletedToDate.addEventListener('change', handleUserWiseCompletedInputChange);
+  }
+  if (elements.userWiseCompletedModalCloseBtn) {
+    elements.userWiseCompletedModalCloseBtn.addEventListener('click', closeUserWiseCompletedModal);
+  }
+  if (elements.userWiseCompletedModalOverlay) {
+    elements.userWiseCompletedModalOverlay.addEventListener('click', closeUserWiseCompletedModal);
+  }
+  if (elements.userWiseCompletedCancelBtn) {
+    elements.userWiseCompletedCancelBtn.addEventListener('click', closeUserWiseCompletedModal);
+  }
+  if (elements.userWiseCompletedGetBtn) {
+    elements.userWiseCompletedGetBtn.addEventListener('click', handleUserWiseCompletedGet);
+  }
 
   // User Wise Results Modal Event Listeners
   if (elements.userWiseResultsModalCloseBtn) {
@@ -4336,6 +4740,15 @@ if (!entry) {
 
   if (elements.userWiseResultsModalOverlay) {
     elements.userWiseResultsModalOverlay.addEventListener('click', closeUserWiseResultsModal);
+  }
+  if (elements.userWiseCompletedResultsModalCloseBtn) {
+    elements.userWiseCompletedResultsModalCloseBtn.addEventListener('click', closeUserWiseCompletedResultsModal);
+  }
+  if (elements.userWiseCompletedResultsModalOverlay) {
+    elements.userWiseCompletedResultsModalOverlay.addEventListener('click', closeUserWiseCompletedResultsModal);
+  }
+  if (elements.userWiseCompletedExportBtn) {
+    elements.userWiseCompletedExportBtn.addEventListener('click', handleUserWiseCompletedExport);
   }
 
   // User Wise Update Button
@@ -4380,6 +4793,25 @@ if (!entry) {
         // Re-apply filters and sorting when sort preset changes
         requestAnimationFrame(() => {
           applyUserWiseFilters();
+        });
+      });
+    }
+  }
+  if (elements.userWiseCompletedSourceFilterSection) {
+    const completedFilterCheckboxes = elements.userWiseCompletedSourceFilterSection.querySelectorAll('[data-source]');
+    completedFilterCheckboxes.forEach((checkbox) => {
+      checkbox.addEventListener('change', () => {
+        requestAnimationFrame(() => {
+          applyUserWiseCompletedFilters();
+        });
+      });
+    });
+    if (elements.userWiseCompletedSortPreset) {
+      elements.userWiseCompletedSortPreset.addEventListener('change', () => {
+        window.userWiseCompletedHeaderSort = '';
+        updateCompletedPlanDateSortIndicator('');
+        requestAnimationFrame(() => {
+          applyUserWiseCompletedFilters();
         });
       });
     }

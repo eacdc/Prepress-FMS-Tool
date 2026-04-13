@@ -827,6 +827,48 @@ h1 {
   top: 0 !important;
 }
 
+/* Completed modal table should support horizontal scrolling */
+#user-wise-completed-results-modal .modal-body {
+  background: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+}
+
+#user-wise-completed-results-modal .table-wrapper {
+  background: var(--bg-secondary) !important;
+  overflow: visible !important;
+  display: block !important;
+  min-width: max-content;
+}
+
+#user-wise-completed-results-modal .prepress-table {
+  background: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  width: max-content !important;
+  min-width: 1800px !important;
+  table-layout: auto !important;
+}
+
+#user-wise-completed-results-modal .prepress-table thead {
+  position: sticky !important;
+  top: 0 !important;
+  z-index: 100 !important;
+}
+
+#user-wise-completed-results-modal .prepress-table thead tr {
+  background: var(--teal-header) !important;
+}
+
+#user-wise-completed-results-modal .prepress-table thead th {
+  background: var(--teal-header) !important;
+  position: sticky !important;
+  top: 0 !important;
+  white-space: nowrap;
+}
+
+#user-wise-completed-results-modal .prepress-table tbody td {
+  white-space: nowrap;
+}
+
 #user-wise-results-modal .prepress-table tbody {
   background: var(--bg-secondary) !important;
 }
