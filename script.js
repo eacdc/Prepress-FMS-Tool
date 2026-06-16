@@ -1040,6 +1040,16 @@
 
   // Fetch entries from API
   async function fetchEntries() {
+    // Skip admin-grid fetch for DB users (role=user). Admin and executive
+    // accounts both see the main pending grid.
+    try {
+      const __sess = JSON.parse(localStorage.getItem('prepressFmsAuth') || 'null');
+      if (__sess && __sess.role === 'user') {
+        state.entries = [];
+        state.filteredEntries = [];
+        return;
+      }
+    } catch (_) { /* ignore */ }
     try {
       showLoading();
       // Add cache-busting parameter to ensure fresh data
@@ -4939,10 +4949,531 @@ if (!entry) {
     }
   });
 
-  // Initialize on load
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
+  // ============================================================
+  // Auth / Login System
+  // ============================================================
+
+  const AUTH_STORAGE_KEY = 'prepressFmsAuth';
+  // Auth API uses /artwork prefix (same as API_BASE_URL)
+  // Note: API_BASE_URL is declared at top of IIFE
+  function getAuthApiBase() {
+    return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? 'http://localhost:3001/api/artwork'
+      : 'https://cdcapi.onrender.com/api/artwork';
+  }
+
+  function getSession() {
+    try {
+      const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      if (!obj || !obj.role) return null;
+      return obj;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function setSession(session) {
+    try {
+      localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
+    } catch (_) { /* ignore */ }
+    // Keep admin password in-memory for set-password admin calls
+    if (session && session.role === 'admin' && session.__adminPassword) {
+      window.__prepressAdminPassword = session.__adminPassword;
+    }
+  }
+
+  function clearSession() {
+    try { localStorage.removeItem(AUTH_STORAGE_KEY); } catch (_) { /* ignore */ }
+    window.__prepressAdminPassword = null;
+  }
+
+  // Populate the user dropdown on the login screen
+  async function populateLoginUserDropdown() {
+    const select = document.getElementById('login-user-select');
+    if (!select) return;
+    try {
+      select.innerHTML = '<option value="">Loading users...</option>';
+      select.disabled = true;
+      const response = await fetch(`${getAuthApiBase()}/users`);
+      const result = await response.json();
+      if (!result.ok || !Array.isArray(result.data)) {
+        throw new Error(result.error || 'Failed to load users');
+      }
+      // Split: static execs first (in their defined order), then DB users alphabetically.
+      const staticUsers = result.data.filter(u => u.isStatic);
+      const dbUsers = result.data
+        .filter(u => !u.isStatic)
+        .sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
+
+      select.innerHTML = '';
+      // Static admin option always first
+      const adminOpt = document.createElement('option');
+      adminOpt.value = 'admin';
+      adminOpt.textContent = 'admin';
+      adminOpt.setAttribute('data-role', 'admin');
+      select.appendChild(adminOpt);
+      // Separator (disabled option)
+      const sep1 = document.createElement('option');
+      sep1.disabled = true;
+      sep1.textContent = '──────────';
+      select.appendChild(sep1);
+      // Static executives (next, in order)
+      staticUsers.forEach(user => {
+        const opt = document.createElement('option');
+        opt.value = user.userKey || user._id;
+        opt.textContent = user.displayName || user.userKey;
+        opt.setAttribute('data-display-name', user.displayName || '');
+        select.appendChild(opt);
+      });
+      if (staticUsers.length) {
+        const sep2 = document.createElement('option');
+        sep2.disabled = true;
+        sep2.textContent = '──────────';
+        select.appendChild(sep2);
+      }
+      // DB users
+      dbUsers.forEach(user => {
+        const opt = document.createElement('option');
+        opt.value = user.userKey || user._id;
+        opt.textContent = user.displayName || user.userKey;
+        opt.setAttribute('data-display-name', user.displayName || '');
+        select.appendChild(opt);
+      });
+      select.disabled = false;
+    } catch (e) {
+      console.error('Failed to populate login dropdown:', e);
+      select.innerHTML = '<option value="">Failed to load users</option>';
+    }
+  }
+
+  function showLoginError(message) {
+    const errEl = document.getElementById('login-error');
+    if (!errEl) return;
+    if (message) {
+      errEl.textContent = message;
+      errEl.style.display = 'block';
+    } else {
+      errEl.textContent = '';
+      errEl.style.display = 'none';
+    }
+  }
+
+  async function handleLoginSubmit(e) {
+    if (e && e.preventDefault) e.preventDefault();
+    showLoginError('');
+    const select = document.getElementById('login-user-select');
+    const passwordInput = document.getElementById('login-password');
+    const submitBtn = document.getElementById('login-submit-btn');
+    if (!select || !passwordInput) return;
+    const userKey = select.value;
+    const password = passwordInput.value;
+    if (!userKey) { showLoginError('Please select a user'); return; }
+    if (!/^[0-9]{6}$/.test(password)) {
+      showLoginError('Password must be exactly 6 digits (0-9).');
+      return;
+    }
+
+    const selectedOption = select.options[select.selectedIndex];
+    const displayName = selectedOption?.getAttribute('data-display-name') || selectedOption?.textContent || userKey;
+
+    try {
+      if (submitBtn) submitBtn.disabled = true;
+      const payload = userKey === 'admin'
+        ? { username: 'admin', password }
+        : { userKey, username: displayName, password };
+      const res = await fetch(`${getAuthApiBase()}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const result = await res.json();
+      if (!res.ok || !result.ok) {
+        showLoginError(result.error || 'Invalid credentials');
+        return;
+      }
+
+      const session = {
+        role: result.role,
+        userKey: result.userKey,
+        displayName: result.displayName,
+        sites: result.sites || []
+      };
+      if (result.role === 'admin') {
+        // Keep the admin password in memory so the Set Passwords page can call the admin-only endpoint
+        session.__adminPassword = password;
+        window.__prepressAdminPassword = password;
+      }
+      setSession(session);
+
+      // Hide login and start the app
+      hideLoginScreen();
+      await startApp(session);
+    } catch (err) {
+      console.error('Login error:', err);
+      showLoginError(err.message || 'Login failed');
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  }
+
+  function showLoginScreen() {
+    const loginScreen = document.getElementById('login-screen');
+    if (loginScreen) loginScreen.style.display = 'flex';
+    // Hide app chrome while logged out
+    document.body.classList.add('logged-out');
+    document.body.classList.remove('role-admin', 'role-user');
+    // Reset password field
+    const pw = document.getElementById('login-password');
+    if (pw) pw.value = '';
+    showLoginError('');
+    populateLoginUserDropdown();
+  }
+
+  function hideLoginScreen() {
+    const loginScreen = document.getElementById('login-screen');
+    if (loginScreen) loginScreen.style.display = 'none';
+    document.body.classList.remove('logged-out');
+  }
+
+  function applyRoleChrome(session) {
+    document.body.classList.remove('role-admin', 'role-user', 'role-executive');
+    const roleClass = session.role === 'admin'
+      ? 'role-admin'
+      : session.role === 'executive'
+        ? 'role-executive'
+        : 'role-user';
+    document.body.classList.add(roleClass);
+
+    const userLabel = document.getElementById('auth-current-user');
+    if (userLabel) {
+      userLabel.style.display = 'inline-flex';
+      userLabel.textContent = session.role === 'admin'
+        ? 'Signed in: admin'
+        : `Signed in: ${session.displayName}`;
+    }
+    const logoutBtn = document.getElementById('btn-logout');
+    if (logoutBtn) logoutBtn.style.display = 'inline-flex';
+
+    // Only role=user gets the floating logout (their user-wise modal covers the header).
+    // Admin and executive use the regular header logout button.
+    const floatingBtn = document.getElementById('btn-logout-floating');
+    const floatingLabel = document.getElementById('btn-logout-floating-label');
+    if (floatingBtn) {
+      if (session.role === 'user') {
+        floatingBtn.style.display = 'inline-flex';
+        if (floatingLabel) floatingLabel.textContent = `Logout (${session.displayName})`;
+      } else {
+        floatingBtn.style.display = 'none';
+      }
+    }
+  }
+
+  function handleLogout() {
+    clearSession();
+    // Hide any open modals
+    const allModals = document.querySelectorAll('.modal');
+    allModals.forEach(m => { m.style.display = 'none'; });
+    document.body.classList.remove('user-wise-modal-open');
+    // Easiest reliable way to fully reset app state: reload
+    window.location.reload();
+  }
+
+  // Auto-open the regular user's own pending screen (reuses the existing flow)
+  async function autoOpenUserOwnPending(session) {
+    const displayName = session.displayName;
+    window.userWiseCurrentUsername = displayName;
+    try {
+      if (typeof showLoading === 'function') showLoading();
+      openUserWiseResultsModal(displayName, []);
+
+      const prepressApiBaseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? 'http://localhost:3001/api/prepress'
+        : 'https://cdcapi.onrender.com/api/prepress';
+
+      const apiUrl = `${prepressApiBaseUrl}/pending?username=${encodeURIComponent(displayName)}`;
+      const response = await fetch(apiUrl);
+      const result = await response.json();
+      if (!response.ok || !result.ok) {
+        throw new Error(result.error || `HTTP ${response.status}`);
+      }
+      window.userWiseAllData = result.data || [];
+      window.userWiseHeaderSort = '';
+      if (elements.userWiseSourceFilterSection) {
+        elements.userWiseSourceFilterSection.style.display = 'block';
+        const filterCheckboxes = elements.userWiseSourceFilterSection.querySelectorAll('[data-source]');
+        filterCheckboxes.forEach(cb => { cb.checked = true; });
+      }
+      applyUserWiseFilters();
+      if (elements.userWiseResultsLoading) elements.userWiseResultsLoading.style.display = 'none';
+    } catch (err) {
+      console.error('Failed to load user-own pending:', err);
+      if (elements.userWiseResultsLoading) elements.userWiseResultsLoading.style.display = 'none';
+      if (elements.userWiseResultsEmpty) {
+        elements.userWiseResultsEmpty.style.display = 'block';
+        elements.userWiseResultsEmpty.innerHTML = `<p>Error: ${err.message}</p>`;
+      }
+    } finally {
+      if (typeof hideLoading === 'function') hideLoading();
+    }
+  }
+
+  // Track init() to avoid re-running it
+  let __initCalled = false;
+  function safeInit() {
+    if (__initCalled) return;
+    __initCalled = true;
     init();
+  }
+
+  async function startApp(session) {
+    applyRoleChrome(session);
+
+    // For every role we run init() so all listeners get wired (User Wise modal
+    // handlers, inline edits, sort, export, etc.). For role=user, init()'s
+    // fetchEntries() call is short-circuited (see guard in fetchEntries) so
+    // the admin grid data is never fetched.
+    safeInit();
+
+    if (session.role === 'user') {
+      // DB user: skip admin grid; auto-open their own pending.
+      await autoOpenUserOwnPending(session);
+    }
+    // role === 'admin' or 'executive': land on the main pending grid (loaded by init()).
+  }
+
+  // ============================================================
+  // Set Passwords (admin) page
+  // ============================================================
+
+  async function openSetPasswordsModal() {
+    const modal = document.getElementById('set-passwords-modal');
+    if (!modal) return;
+    modal.style.display = 'flex';
+    const loading = document.getElementById('set-passwords-loading');
+    const empty = document.getElementById('set-passwords-empty');
+    const toolbar = document.getElementById('set-passwords-toolbar');
+    const table = document.getElementById('set-passwords-table');
+    const tbody = document.getElementById('set-passwords-tbody');
+    if (loading) loading.style.display = 'block';
+    if (empty) empty.style.display = 'none';
+    if (toolbar) toolbar.style.display = 'none';
+    if (table) table.style.display = 'none';
+    if (tbody) tbody.innerHTML = '';
+
+    try {
+      const res = await fetch(`${getAuthApiBase()}/users`);
+      const result = await res.json();
+      if (!result.ok || !Array.isArray(result.data)) {
+        throw new Error(result.error || 'Failed to load users');
+      }
+      // Sort: static accounts first (in defined order), then DB users alphabetically by displayName.
+      const users = [...result.data].sort((a, b) => {
+        const aStatic = !!a.isStatic;
+        const bStatic = !!b.isStatic;
+        if (aStatic !== bStatic) return aStatic ? -1 : 1;
+        return (a.displayName || '').localeCompare(b.displayName || '');
+      });
+      if (!users.length) {
+        if (loading) loading.style.display = 'none';
+        if (empty) empty.style.display = 'block';
+        return;
+      }
+      renderSetPasswordsRows(users);
+      if (loading) loading.style.display = 'none';
+      if (toolbar) toolbar.style.display = 'block';
+      if (table) table.style.display = 'table';
+    } catch (e) {
+      if (loading) loading.style.display = 'none';
+      if (empty) {
+        empty.style.display = 'block';
+        empty.innerHTML = `<p>Error: ${e.message}</p>`;
+      }
+    }
+  }
+
+  function renderSetPasswordsRows(users) {
+    const tbody = document.getElementById('set-passwords-tbody');
+    if (!tbody) return;
+    const frag = document.createDocumentFragment();
+    users.forEach(user => {
+      const tr = document.createElement('tr');
+      tr.dataset.userKey = user.userKey || user._id || '';
+      tr.dataset.displayName = (user.displayName || '').toLowerCase();
+      const subtitle = user.isStatic
+        ? 'Executive (static)'
+        : ((user.sites || []).join(', ') || '—');
+      const staticBadge = user.isStatic
+        ? '<span class="static-badge" title="Static account">STATIC</span>'
+        : '';
+      tr.innerHTML = `
+        <td>
+          <div style="font-weight: 600; display: inline-flex; align-items: center; gap: 0.4rem;">
+            ${escapeHtml(user.displayName || '(no name)')}
+            ${staticBadge}
+          </div>
+          <div style="font-size: 0.75rem; color: var(--text-secondary, #6b7280);">
+            ${escapeHtml(subtitle)}
+          </div>
+        </td>
+        <td>
+          <span class="pw-status ${user.hasPassword ? 'is-set' : 'is-unset'}">
+            ${user.hasPassword ? 'Set' : 'Not set'}
+          </span>
+        </td>
+        <td>
+          <input type="password" class="set-pw-input" placeholder="6-digit password" autocomplete="new-password" inputmode="numeric" maxlength="6" pattern="[0-9]{6}" style="width: 100%; padding: 0.4rem 0.6rem; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-primary); color: var(--text-primary);" />
+        </td>
+        <td>
+          <button type="button" class="btn-primary small set-pw-save-btn">Save</button>
+        </td>
+      `;
+      frag.appendChild(tr);
+    });
+    tbody.innerHTML = '';
+    tbody.appendChild(frag);
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function closeSetPasswordsModal() {
+    const modal = document.getElementById('set-passwords-modal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  async function handleSetPasswordSave(tr) {
+    const userKey = tr?.dataset?.userKey;
+    const input = tr?.querySelector('.set-pw-input');
+    const saveBtn = tr?.querySelector('.set-pw-save-btn');
+    const statusSpan = tr?.querySelector('.pw-status');
+    if (!userKey || !input) return;
+    const password = input.value;
+    if (!/^[0-9]{6}$/.test(password)) {
+      alert('Password must be exactly 6 digits (0-9).');
+      input.focus();
+      return;
+    }
+    const adminPassword = window.__prepressAdminPassword
+      || (getSession() && getSession().__adminPassword);
+    if (!adminPassword) {
+      alert('Admin session expired. Please sign in again.');
+      handleLogout();
+      return;
+    }
+    try {
+      if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Saving...'; }
+      const res = await fetch(`${getAuthApiBase()}/users/set-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userKey, password, adminPassword })
+      });
+      const result = await res.json();
+      if (!res.ok || !result.ok) {
+        throw new Error(result.error || `HTTP ${res.status}`);
+      }
+      if (statusSpan) {
+        statusSpan.textContent = 'Set';
+        statusSpan.classList.remove('is-unset');
+        statusSpan.classList.add('is-set');
+      }
+      input.value = '';
+      if (saveBtn) { saveBtn.textContent = 'Saved'; }
+      setTimeout(() => { if (saveBtn) saveBtn.textContent = 'Save'; }, 1500);
+    } catch (e) {
+      alert('Failed to set password: ' + (e.message || e));
+      if (saveBtn) saveBtn.textContent = 'Save';
+    } finally {
+      if (saveBtn) saveBtn.disabled = false;
+    }
+  }
+
+  function filterSetPasswordsRows(query) {
+    const tbody = document.getElementById('set-passwords-tbody');
+    if (!tbody) return;
+    const q = (query || '').toLowerCase().trim();
+    Array.from(tbody.querySelectorAll('tr')).forEach(tr => {
+      const name = tr.dataset.displayName || '';
+      tr.style.display = !q || name.includes(q) ? '' : 'none';
+    });
+  }
+
+  function wireAuthEventListeners() {
+    const loginForm = document.getElementById('login-form');
+    if (loginForm) loginForm.addEventListener('submit', handleLoginSubmit);
+    // Restrict login password to digits-only, max 6
+    const loginPwInput = document.getElementById('login-password');
+    if (loginPwInput) {
+      loginPwInput.addEventListener('input', (e) => {
+        const digitsOnly = (e.target.value || '').replace(/\D+/g, '').slice(0, 6);
+        if (digitsOnly !== e.target.value) e.target.value = digitsOnly;
+      });
+    }
+    const logoutBtn = document.getElementById('btn-logout');
+    if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
+    const floatingLogoutBtn = document.getElementById('btn-logout-floating');
+    if (floatingLogoutBtn) floatingLogoutBtn.addEventListener('click', handleLogout);
+
+    const btnSetPasswords = document.getElementById('btn-set-passwords');
+    if (btnSetPasswords) btnSetPasswords.addEventListener('click', openSetPasswordsModal);
+    const setPwClose = document.getElementById('set-passwords-modal-close-btn');
+    if (setPwClose) setPwClose.addEventListener('click', closeSetPasswordsModal);
+    const setPwOverlay = document.getElementById('set-passwords-modal-overlay');
+    if (setPwOverlay) setPwOverlay.addEventListener('click', closeSetPasswordsModal);
+    const setPwSearch = document.getElementById('set-passwords-search');
+    if (setPwSearch) setPwSearch.addEventListener('input', (e) => filterSetPasswordsRows(e.target.value));
+    const setPwTbody = document.getElementById('set-passwords-tbody');
+    if (setPwTbody) {
+      setPwTbody.addEventListener('click', (e) => {
+        const btn = e.target.closest('.set-pw-save-btn');
+        if (!btn) return;
+        const tr = btn.closest('tr');
+        if (tr) handleSetPasswordSave(tr);
+      });
+      setPwTbody.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target.classList.contains('set-pw-input')) {
+          e.preventDefault();
+          const tr = e.target.closest('tr');
+          if (tr) handleSetPasswordSave(tr);
+        }
+      });
+      // Enforce digits-only, max 6 chars while typing/pasting
+      setPwTbody.addEventListener('input', (e) => {
+        if (!e.target.classList.contains('set-pw-input')) return;
+        const digitsOnly = (e.target.value || '').replace(/\D+/g, '').slice(0, 6);
+        if (digitsOnly !== e.target.value) e.target.value = digitsOnly;
+      });
+    }
+  }
+
+  // ============================================================
+  // Bootstrap: auth-gated startup
+  // ============================================================
+  function bootstrap() {
+    wireAuthEventListeners();
+    const session = getSession();
+    if (!session) {
+      showLoginScreen();
+      return;
+    }
+    // Re-hydrate admin password if available (lost on refresh; user must sign in again to use set-password)
+    if (session.role === 'admin' && session.__adminPassword) {
+      window.__prepressAdminPassword = session.__adminPassword;
+    }
+    applyRoleChrome(session);
+    startApp(session);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bootstrap);
+  } else {
+    bootstrap();
   }
 })();
