@@ -3527,10 +3527,31 @@ if (!entry) {
     return sorted;
   }
 
+  function isUserWiseViewOnly() {
+    try {
+      const s = JSON.parse(localStorage.getItem('prepressFmsAuth') || 'null');
+      return !!(s && s.role === 'executive');
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function formatUserWiseLinkCell(link) {
+    const raw = (link || '').trim();
+    if (!raw) return '';
+    const safe = raw.replace(/"/g, '&quot;');
+    if (/^https?:\/\//i.test(raw)) {
+      return `<a href="${safe}" target="_blank" rel="noopener noreferrer">${safe}</a>`;
+    }
+    return safe;
+  }
+
   // Render user-wise results table
   function renderUserWiseResultsTable(data) {
     if (!elements.userWiseResultsTableBody) return;
-    
+
+    const viewOnly = isUserWiseViewOnly();
+    const colCount = viewOnly ? 13 : 14;
     const hasLoadedData = window.userWiseAllData && window.userWiseAllData.length > 0;
     const noRows = !data || data.length === 0;
 
@@ -3541,7 +3562,6 @@ if (!entry) {
       }
       // When filters return no rows but we have loaded data: keep table visible with a placeholder row
       if (hasLoadedData) {
-        const colCount = 14; // Select + 13 data columns
         elements.userWiseResultsTableBody.innerHTML =
           `<tr class="user-wise-no-match-row"><td colspan="${colCount}" style="text-align: center; padding: 2rem; color: var(--text-muted); font-size: 0.9rem;">No rows match your filters. Clear column filters or change source filters to see data.</td></tr>`;
         if (elements.userWiseResultsTableContainer) {
@@ -3581,14 +3601,41 @@ if (!entry) {
       elements.userWiseSourceFilterSection.style.display = 'block';
     }
     
-    // Build table rows with checkbox instead of Status column
+    // Build table rows (checkbox + editable fields for admin/user; read-only for executive)
     const rowsHtml = data.map((item, index) => {
       const rowId = `user-wise-row-${index}`;
-      console.log('********************item', item);
-      return `<tr data-row-id="${rowId}">
-        <td style="text-align: center;">
+      const remarksCell = viewOnly
+        ? `<td title="${(item.Remarks || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}">${(item.Remarks || '').replace(/"/g, '&quot;')}</td>`
+        : `<td>
+          <textarea
+            class="user-wise-remark-input"
+            data-index="${index}"
+            data-original-value="${(item.Remarks || '').replace(/"/g, '&quot;')}"
+            placeholder="Enter remark..."
+            title="${(item.Remarks || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}"
+            style="width: 100%; padding: 0.25rem 0.5rem; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px; font-size: 0.7rem; min-height: 2.2rem; resize: vertical;"
+          >${(item.Remarks || '').replace(/"/g, '&quot;')}</textarea>
+        </td>`;
+      const linkCell = viewOnly
+        ? `<td>${formatUserWiseLinkCell(item.Link)}</td>`
+        : `<td>
+          <input 
+            type="url" 
+            class="user-wise-link-input" 
+            data-index="${index}"
+            data-original-value="${(item.Link || '').replace(/"/g, '&quot;')}"
+            value="${(item.Link || '').replace(/"/g, '&quot;')}" 
+            placeholder="Enter link..."
+            style="width: 100%; padding: 0.25rem 0.5rem; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px; font-size: 0.75rem;"
+          >
+        </td>`;
+      const selectCell = viewOnly
+        ? ''
+        : `<td style="text-align: center;">
           <input type="checkbox" class="user-wise-row-checkbox" data-index="${index}" data-row-id="${rowId}">
-        </td>
+        </td>`;
+      return `<tr data-row-id="${rowId}">
+        ${selectCell}
         <td>${(item.PONumber || '').replace(/"/g, '&quot;')}</td>
         <td>${formatDateDDMMMYYYY(item.PODate)}</td>
         <td>${(item.Jobcardnumber || '').replace(/"/g, '&quot;')}</td>
@@ -3599,27 +3646,8 @@ if (!entry) {
         <td>${(item.Division || '').replace(/"/g, '&quot;')}</td>
         <td>${formatDateDDMMMYYYY(item.FileReceivedDate)}</td>
         <td>${(item.Operation || '').replace(/"/g, '&quot;')}</td>
-        <td>
-          <textarea
-            class="user-wise-remark-input"
-            data-index="${index}"
-            data-original-value="${(item.Remarks || '').replace(/"/g, '&quot;')}"
-            placeholder="Enter remark..."
-            title="${(item.Remarks || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}"
-            style="width: 100%; padding: 0.25rem 0.5rem; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px; font-size: 0.7rem; min-height: 2.2rem; resize: vertical;"
-          >${(item.Remarks || '').replace(/"/g, '&quot;')}</textarea>
-        </td>
-        <td>
-          <input 
-            type="url" 
-            class="user-wise-link-input" 
-            data-index="${index}"
-            data-original-value="${(item.Link || '').replace(/"/g, '&quot;')}"
-            value="${(item.Link || '').replace(/"/g, '&quot;')}" 
-            placeholder="Enter link..."
-            style="width: 100%; padding: 0.25rem 0.5rem; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px; font-size: 0.75rem;"
-          >
-        </td>
+        ${remarksCell}
+        ${linkCell}
         <td>${formatDateDDMMMYYYY(item.PlanDate)}</td>
       </tr>`;
     }).join('');
@@ -3642,8 +3670,10 @@ if (!entry) {
       } : null
     });
     
-    // Setup checkbox event listeners
-    setupUserWiseCheckboxes(data);
+    // Setup checkbox event listeners (editable mode only)
+    if (!viewOnly) {
+      setupUserWiseCheckboxes(data);
+    }
     
     // Setup column filter inputs and Plan Date header sort
     setupUserWiseColumnFilters();
@@ -3736,10 +3766,19 @@ if (!entry) {
   
   // Update selected count and show/hide update button
   function updateSelectedCount() {
+    const hasData = window.userWiseResultsData && window.userWiseResultsData.length > 0;
+    const viewOnly = isUserWiseViewOnly();
+
+    if (viewOnly) {
+      if (elements.userWiseResultsActions) {
+        elements.userWiseResultsActions.style.display = hasData ? 'block' : 'none';
+      }
+      return;
+    }
+
     const checkboxes = elements.userWiseResultsTableBody.querySelectorAll('.user-wise-row-checkbox');
     const checkedBoxes = elements.userWiseResultsTableBody.querySelectorAll('.user-wise-row-checkbox:checked');
     const count = checkedBoxes.length;
-    const hasData = window.userWiseResultsData && window.userWiseResultsData.length > 0;
     
     if (elements.userWiseSelectedCount) {
       elements.userWiseSelectedCount.innerHTML = `<strong>${count}</strong> item(s) selected`;
@@ -3900,6 +3939,9 @@ if (!entry) {
 
   // Handle update button click - directly update with values from table cells
   async function handleUserWiseUpdate() {
+    if (isUserWiseViewOnly()) {
+      return;
+    }
     const selectedRows = getSelectedUserWiseRows();
     
     if (selectedRows.length === 0) {
@@ -4167,6 +4209,18 @@ if (!entry) {
     // Update title with username
     if (elements.userWiseResultsUsername) {
       elements.userWiseResultsUsername.textContent = username;
+    }
+    let viewOnlyLabel = document.getElementById('user-wise-view-only-label');
+    if (isUserWiseViewOnly()) {
+      if (!viewOnlyLabel && elements.userWiseResultsTitle) {
+        viewOnlyLabel = document.createElement('span');
+        viewOnlyLabel.id = 'user-wise-view-only-label';
+        viewOnlyLabel.style.cssText = 'font-size:0.75rem;font-weight:500;color:var(--text-muted);margin-left:0.5rem;';
+        elements.userWiseResultsTitle.appendChild(viewOnlyLabel);
+      }
+      if (viewOnlyLabel) viewOnlyLabel.textContent = '(View only)';
+    } else if (viewOnlyLabel) {
+      viewOnlyLabel.remove();
     }
     
     // Show loading initially

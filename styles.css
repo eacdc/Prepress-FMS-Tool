@@ -1303,9 +1303,27 @@ body.role-user #tag-actions {
   display: none !important;
 }
 
-/* Role: executive — sees the main pending grid but no admin/user-wise features. */
+/* Role: user — hide User Wise Pending (they auto-open their own screen). */
+body.role-user #btn-user-wise-pending {
+  display: none !important;
+}
+
+/* Role: executive — main pending grid + User Wise Pending (view-only); hide other admin tools. */
 body.role-executive .admin-only {
   display: none !important;
+}
+
+/* Executive: User Wise Pending is view-only (no select / update). */
+body.role-executive #user-wise-results-modal .user-wise-select-col {
+  display: none !important;
+}
+body.role-executive #user-wise-selected-count,
+body.role-executive #user-wise-unselect-all-btn,
+body.role-executive #user-wise-update-btn {
+  display: none !important;
+}
+body.role-executive #user-wise-results-actions > div {
+  justify-content: flex-end !important;
 }
 
 /* Role: user — make sure the user-wise results modal close button & overlay
