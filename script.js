@@ -3304,11 +3304,11 @@ if (!entry) {
       const result = await response.json();
       
       if (result.ok && result.data) {
-        // Populate dropdown with all users, sorted by displayName
+        // Populate dropdown with DB users only (exclude static executive accounts)
         elements.userWiseSelect.innerHTML = '<option value="">Select User</option>';
-        const sortedUsers = [...result.data].sort((a, b) => 
-          (a.displayName || '').localeCompare(b.displayName || '')
-        );
+        const sortedUsers = result.data
+          .filter(user => !user.isStatic)
+          .sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''));
         
         sortedUsers.forEach(user => {
           const option = document.createElement('option');
