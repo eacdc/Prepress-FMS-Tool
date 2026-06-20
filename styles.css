@@ -1289,13 +1289,13 @@ body.logged-out .app-footer {
   white-space: nowrap;
 }
 
-/* Role: user — hide admin-only chrome */
+/* Role: user — hide admin-only chrome (main grid only; not User Wise modal filters) */
 body.role-user .admin-only,
 body.role-user #btn-add-entry,
 body.role-user #btn-clear-filters,
 body.role-user #btn-export-excel,
 body.role-user .view-toggle-section,
-body.role-user .source-filter-section,
+body.role-user .app-main .source-filter-section,
 body.role-user #table-section,
 body.role-user #pagination-container,
 body.role-user #update-actions,
