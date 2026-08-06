@@ -16,6 +16,30 @@
     yearElement.textContent = new Date().getFullYear();
   }
 
+  // Static list of Sales Persons / Executives (mirrors the "Add Entry" form's Executive dropdown)
+  const EXECUTIVE_OPTIONS = [
+    'Amartya Dasgupta',
+    'Amit Kumar Mittal',
+    'Basabjit',
+    'Chandan Ray',
+    'Kaushik Bargi',
+    'Krishna Singh',
+    'Lohit Mahato',
+    'Manu Choudhary',
+    'Niladri Mondal',
+    'Partha Moulik',
+    'Pintu Ghosh',
+    'Prakash Show',
+    'Rajushaw',
+    'Ranajit Dhar',
+    'Sameer Arora',
+    'Sanjay Biswas',
+    'Sanjay Mishra',
+    'Shib Shankar Sarkar',
+    'Shyam Jaiswara',
+    'Tanmoy Basu',
+  ];
+
   // State management
   const state = {
     entries: [],
@@ -370,6 +394,7 @@
   function mapFieldToBackend(field) {
     const fieldMap = {
       clientName: 'ClientName',
+      executive: 'Executive',
       file: 'FileStatus',
       fileReceivedDate: 'FileReceivedDate',
       refPCC: 'RefPCC',
@@ -1527,6 +1552,21 @@
           <option value="Done" ${(currentValue || '').toString().trim().toLowerCase() === 'done' ? 'selected' : ''}>Done</option>
         `;
 
+      case 'executive': {
+        const execValue = (currentValue || '').toString().trim();
+        const execLower = execValue.toLowerCase();
+        const knownOptions = EXECUTIVE_OPTIONS.map(
+          (name) =>
+            `<option value="${name}" ${name.toLowerCase() === execLower ? 'selected' : ''}>${name}</option>`
+        ).join('');
+        // Preserve any existing value that isn't in the static list (e.g. legacy/free-text names)
+        const extraOption =
+          execValue && !EXECUTIVE_OPTIONS.some((name) => name.toLowerCase() === execLower)
+            ? `<option value="${execValue.replace(/"/g, '&quot;')}" selected>${execValue}</option>`
+            : '';
+        return `<option value=""></option>${extraOption}${knownOptions}`;
+      }
+
       default:
         return '<option value="">Select</option>';
     }
@@ -1706,7 +1746,21 @@
         <td>${entry.pwoNo || ''}</td>
         <td>${pwoDateFmt}</td>
         <td>${entry.jobName || ''}</td>
-        <td>${entry.executive || ''}</td>
+        <td>
+          ${
+            isMongoUnordered && isAdminUser()
+              ? `<select
+                  class="cell-select editable"
+                  data-field="executive"
+                  data-initial-value="${(entry.executive || '').replace(/"/g, '&quot;')}"
+                >
+                  <option value="${(entry.executive || '').replace(/"/g, '&quot;')}">
+                    ${entry.executive || 'Click to select'}
+                  </option>
+                </select>`
+              : (entry.executive || '')
+          }
+        </td>
         <td>
           ${
             isMongoUnordered
@@ -3531,6 +3585,17 @@ if (!entry) {
     try {
       const s = JSON.parse(localStorage.getItem('prepressFmsAuth') || 'null');
       return !!(s && s.role === 'executive');
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // Admin-only check: used to gate editing of the Sales Person (Executive) field
+  // for MongoDB-sourced (Unordered) jobs in the main pending grid.
+  function isAdminUser() {
+    try {
+      const s = JSON.parse(localStorage.getItem('prepressFmsAuth') || 'null');
+      return !!(s && s.role === 'admin');
     } catch (_) {
       return false;
     }
