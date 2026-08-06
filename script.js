@@ -670,6 +670,14 @@
           const backendValue = mapValueToBackend(field, updates[field], entry);
           payload.update[backendField] = backendValue;
           }
+
+          // Executive (sales person) reassignment is admin-only; backend re-verifies this.
+          if (backendField === 'Executive') {
+            payload.adminPassword =
+              window.__prepressAdminPassword ||
+              (getSession() && getSession().__adminPassword) ||
+              undefined;
+          }
         });
 
         payloads.push({ payload, entry });
@@ -1372,6 +1380,7 @@
   // Column mapping: index -> field name (for editable fields)
   // Note: Link Unordered column added at index 8
   const COLUMN_FIELD_MAP = {
+    6: 'executive',           // Executive / Sales Person (Mongo rows only, admin only)
     7: 'refPCC',             // Ref P.C.C...
     8: 'linkUnordered',      // Link Unordered (MSSQL: cancel unordered; Mongo: SQL dropdown)
     9: 'clientName',         // Client Name (Mongo rows only)
@@ -1752,6 +1761,7 @@
               ? `<select
                   class="cell-select editable"
                   data-field="executive"
+                  data-col-index="6"
                   data-initial-value="${(entry.executive || '').replace(/"/g, '&quot;')}"
                 >
                   <option value="${(entry.executive || '').replace(/"/g, '&quot;')}">
