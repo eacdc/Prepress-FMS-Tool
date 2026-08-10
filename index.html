@@ -343,7 +343,12 @@
                     <input type="text" class="filter-input" data-column="platePerson" placeholder="Search" />
                   </th>
                   <th>
-                    <input type="text" class="filter-input" data-column="plateOutput" placeholder="Search" />
+                    <select class="filter-select" data-column="plateOutput">
+                      <option value="">All</option>
+                      <option value="Pending">Pending</option>
+                      <option value="Done">Done</option>
+                      <option value="Not Required">Not Required</option>
+                    </select>
                   </th>
                   <th>
                     <input type="date" class="filter-date" data-column="platePlan" />
@@ -686,13 +691,14 @@
                   <option value="">Select Person</option>
                   <!-- Options will be populated dynamically based on division -->
                 </select>
+                <small id="form-platePerson-hint" style="display: none; color: var(--text-muted); font-size: 0.75rem;">Optional when Plate Output is Not Required</small>
               </div>
               <div class="form-group">
                 <label for="form-plateOutput">Plate Output</label>
                 <select id="form-plateOutput" name="plateOutput">
-                  <option value="">Select Status</option>
-                  <option value="Pending">Pending</option>
+                  <option value="Pending" selected>Pending</option>
                   <option value="Done">Done</option>
+                  <option value="Not Required">Not Required</option>
                 </select>
               </div>
               <div class="form-group">
@@ -883,14 +889,19 @@
                 </svg>
                 Export to Excel
               </button>
-              <button type="button" class="btn-primary" id="user-wise-update-btn">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                  <polyline points="17 8 12 3 7 8"></polyline>
-                  <line x1="12" y1="3" x2="12" y2="15"></line>
-                </svg>
-                Update
-              </button>
+              <div class="user-wise-update-split" id="user-wise-update-split" style="display: none;">
+                <button type="button" class="btn-primary" id="user-wise-update-btn" title="Mark selected step(s) done">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="17 8 12 3 7 8"></polyline>
+                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                  </svg>
+                  Mark Done
+                </button>
+                <button type="button" class="btn-secondary" id="user-wise-not-required-btn" title="Mark selected Plate Output step(s) as Not Required">
+                  Not Required
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -993,6 +1004,7 @@
                 <tr class="table-header-row">
                   <th>PO Number</th><th>PO Date</th><th>Jobcard Number</th><th>Executive</th><th>Client Name</th>
                   <th>Ref MIS Code</th><th>Job Name</th><th>Division</th><th>File Received Date</th><th>Operation</th>
+                  <th>Status</th>
                   <th>Remarks</th><th>Link</th>
                   <th class="sortable-header" data-sort-column="PlanDate" style="cursor: pointer; user-select: none;">Plan Date <span class="sort-indicator" style="margin-left: 0.25rem; font-size: 0.7rem; opacity: 0.5;">↕</span></th>
                   <th>Actual Date</th>
@@ -1007,6 +1019,16 @@
                   <th><input type="text" class="user-wise-completed-filter-input filter-input" data-column="Division" placeholder="Search" style="width: 100%; padding: 0.25rem 0.4rem; font-size: 0.7rem; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px;" /></th>
                   <th></th>
                   <th><input type="text" class="user-wise-completed-filter-input filter-input" data-column="Operation" placeholder="Search" style="width: 100%; padding: 0.25rem 0.4rem; font-size: 0.7rem; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px;" /></th>
+                  <th>
+                    <select class="user-wise-completed-filter-input filter-select" data-column="Status" style="width: 100%; padding: 0.25rem 0.4rem; font-size: 0.7rem; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px;">
+                      <option value="">All</option>
+                      <option value="Completed">Completed</option>
+                      <option value="Done">Done</option>
+                      <option value="Not Required">Not Required</option>
+                      <option value="Approved">Approved</option>
+                      <option value="Cancelled">Cancelled</option>
+                    </select>
+                  </th>
                   <th></th><th></th><th></th><th></th>
                 </tr>
               </thead>

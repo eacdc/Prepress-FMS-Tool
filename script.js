@@ -40,6 +40,53 @@
     'Tanmoy Basu',
   ];
 
+  // Plate Output closed states (case-insensitive). Pending is open; Done / Not Required are closed.
+  const PLATE_CLOSED_STATUSES = ['DONE', 'NOT REQUIRED'];
+
+  function normalizePlateOutput(value) {
+    if (value === null || value === undefined) return '';
+    const t = String(value).trim();
+    if (!t) return '';
+    const upper = t.toUpperCase();
+    if (upper === 'PENDING') return 'Pending';
+    if (upper === 'DONE') return 'Done';
+    if (
+      upper === 'NOT REQUIRED' ||
+      upper === 'NOT REQD' ||
+      upper === 'NA' ||
+      upper === 'N/A' ||
+      upper === 'NO'
+    ) {
+      return 'Not Required';
+    }
+    return t;
+  }
+
+  function isPlateClosed(value) {
+    const n = normalizePlateOutput(value);
+    return PLATE_CLOSED_STATUSES.includes(n.toUpperCase());
+  }
+
+  /** Blank/null is treated as still pending (open). */
+  function isPlatePending(value) {
+    const n = normalizePlateOutput(value);
+    if (!n) return true;
+    return n.toUpperCase() === 'PENDING';
+  }
+
+  function formatStatusChip(status) {
+    const raw = (status || '').toString().trim();
+    if (!raw) return '';
+    const safe = raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    const upper = raw.toUpperCase();
+    let cls = 'status-chip';
+    if (upper === 'NOT REQUIRED') cls += ' status-chip-neutral';
+    else if (upper === 'DONE' || upper === 'COMPLETED' || upper === 'APPROVED') cls += ' status-chip-success';
+    else if (upper === 'PENDING' || upper === 'SENT' || upper === 'REDO') cls += ' status-chip-pending';
+    else cls += ' status-chip-default';
+    return `<span class="${cls}">${safe}</span>`;
+  }
+
   // State management
   const state = {
     entries: [],
@@ -106,6 +153,8 @@
     userWiseResultsActions: document.getElementById('user-wise-results-actions'),
     userWiseSelectedCount: document.getElementById('user-wise-selected-count'),
     userWiseUpdateBtn: document.getElementById('user-wise-update-btn'),
+    userWiseNotRequiredBtn: document.getElementById('user-wise-not-required-btn'),
+    userWiseUpdateSplit: document.getElementById('user-wise-update-split'),
     userWiseExportBtn: document.getElementById('user-wise-export-btn'),
     userWiseSelectAll: document.getElementById('user-wise-select-all'),
     userWiseUnselectAllBtn: document.getElementById('user-wise-unselect-all-btn'),
@@ -494,15 +543,31 @@
       Array.from(state.pendingUpdates.values()).forEach(({ entry, updates }) => {
         if (!entry) return;
 
-        const missingLabels = [];
-        requiredFieldDefs.forEach(({ key, label }) => {
-          // Prefer the pending updated value if present; otherwise fall back to the entry's current value
+        const resolveField = (key) => {
           const hasUpdate = updates && Object.prototype.hasOwnProperty.call(updates, key);
           const rawVal = hasUpdate ? updates[key] : entry[key];
-          const val =
-            rawVal === null || rawVal === undefined
-              ? ''
-              : String(rawVal).trim();
+          return rawVal === null || rawVal === undefined ? '' : String(rawVal).trim();
+        };
+
+        // Plate Output must never stay blank/NULL — default to Pending if somehow empty
+        let plateOutputVal = normalizePlateOutput(resolveField('plateOutput'));
+        if (!plateOutputVal) {
+          plateOutputVal = 'Pending';
+          if (updates) updates.plateOutput = 'Pending';
+          entry.plateOutput = 'Pending';
+        }
+
+        const plateNotRequired = plateOutputVal === 'Not Required';
+
+        const missingLabels = [];
+        requiredFieldDefs.forEach(({ key, label }) => {
+          // Plate Person / plan are optional when plate is Not Required
+          if (key === 'platePerson' && plateNotRequired) return;
+          if (key === 'plateOutput') {
+            // already defaulted above
+            return;
+          }
+          const val = resolveField(key);
           if (!val) {
             missingLabels.push(label);
           }
@@ -667,8 +732,15 @@
             }
           } else {
             // Non-person fields: use normal mapping
-          const backendValue = mapValueToBackend(field, updates[field], entry);
-          payload.update[backendField] = backendValue;
+            let backendValue = mapValueToBackend(field, updates[field], entry);
+            if (field === 'plateOutput') {
+              backendValue = normalizePlateOutput(backendValue) || 'Pending';
+            }
+            // Never send PlateActual — backend stamps it for Done / Not Required
+            if (backendField === 'PlateActual' || field === 'plateActual') {
+              return;
+            }
+            payload.update[backendField] = backendValue;
           }
 
           // Executive (sales person) reassignment is admin-only; backend re-verifies this.
@@ -1242,7 +1314,6 @@
         const softStatus = (entry.softApprovalStatus || '').toString().trim().toLowerCase();
         const hardReq = (entry.hardApprovalReqd || '').toString().trim().toLowerCase();
         const hardStatus = (entry.hardApprovalStatus || '').toString().trim().toLowerCase();
-        const plateOutput = (entry.plateOutput || '').toString().trim().toLowerCase();
 
         if (preset === 'no-prepress') {
           // 1. Prepress person not assigned -> null / '' / blank
@@ -1275,8 +1346,8 @@
             return false;
           }
         } else if (preset === 'pending-plates') {
-          // 7. Pending Plates -> plate output is 'Pending' OR blank (null/empty treated as pending)
-          if (plateOutput && plateOutput !== 'pending') {
+          // 7. Pending Plates -> plate still open (Pending / blank). Done and Not Required are closed.
+          if (!isPlatePending(entry.plateOutput)) {
             return false;
           }
         }
@@ -1554,12 +1625,15 @@
           <option value="Received" ${normVal === 'Received' ? 'selected' : ''}>Received</option>
         `;
 
-      case 'plateOutput':
+      case 'plateOutput': {
+        const plateNorm = normalizePlateOutput(currentValue);
         return `
           <option value=""></option>
-          <option value="Pending" ${(currentValue || '').toString().trim().toLowerCase() === 'pending' ? 'selected' : ''}>Pending</option>
-          <option value="Done" ${(currentValue || '').toString().trim().toLowerCase() === 'done' ? 'selected' : ''}>Done</option>
+          <option value="Pending" ${plateNorm === 'Pending' ? 'selected' : ''}>Pending</option>
+          <option value="Done" ${plateNorm === 'Done' ? 'selected' : ''}>Done</option>
+          <option value="Not Required" ${plateNorm === 'Not Required' ? 'selected' : ''}>Not Required</option>
         `;
+      }
 
       case 'executive': {
         const execValue = (currentValue || '').toString().trim();
@@ -1745,8 +1819,11 @@
       const finallyApprovedFmt = formatBoolean(entry.finallyApproved);
       const isMongoUnordered = entry.__SourceDB === 'MONGO_UNORDERED';
       const finalApprovalYes = entry.finallyApproved === true || String(entry.finallyApproved || '').toLowerCase() === 'yes';
-      const plateOutputPending = String(entry.plateOutput || '').trim().toLowerCase() === 'pending';
+      const plateOutputPending = isPlatePending(entry.plateOutput);
+      const plateNotRequired = normalizePlateOutput(entry.plateOutput) === 'Not Required';
       const approvalYesPlatePendingClass = (finalApprovalYes && plateOutputPending) ? ' row-approval-yes-plate-pending' : '';
+      const platePersonDisabledAttr = plateNotRequired ? ' disabled' : '';
+      const platePersonDisabledClass = plateNotRequired ? ' plate-field-disabled' : '';
       
       return `<tr class="data-row${modifiedClass}${approvalYesPlatePendingClass}" data-id="${entryId}">
         <td>${soDateFmt}</td>
@@ -2010,16 +2087,18 @@
         </td>
         <td>${toolingBlanketPlanFmt}</td>
         <td>${toolingBlanketActualFmt}</td>
-        <td>
+        <td class="${platePersonDisabledClass}">
           <select
-            class="cell-select editable"
+            class="cell-select editable${platePersonDisabledClass}"
             data-field="platePerson"
             data-col-index="36"
             data-initial-value="${(entry.platePerson || '').replace(/"/g, '&quot;')}"
             data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
+            ${platePersonDisabledAttr}
+            title="${plateNotRequired ? 'Not required when Plate Output is Not Required' : ''}"
           >
             <option value="${(entry.platePerson || '').replace(/"/g, '&quot;')}">
-              ${getDropdownDisplayText('platePerson', entry) || 'Click to select'}
+              ${getDropdownDisplayText('platePerson', entry) || (plateNotRequired ? '—' : 'Click to select')}
             </option>
           </select>
         </td>
@@ -2028,15 +2107,15 @@
             class="cell-select editable"
             data-field="plateOutput"
             data-col-index="37"
-            data-initial-value="${(entry.plateOutput || '').replace(/"/g, '&quot;')}"
+            data-initial-value="${(normalizePlateOutput(entry.plateOutput) || entry.plateOutput || '').replace(/"/g, '&quot;')}"
             data-division="${(entry.division || '').replace(/"/g, '&quot;')}"
           >
-            <option value="${(entry.plateOutput || '').replace(/"/g, '&quot;')}">
-              ${getDropdownDisplayText('plateOutput', entry) || 'Click to select'}
+            <option value="${(normalizePlateOutput(entry.plateOutput) || entry.plateOutput || '').replace(/"/g, '&quot;')}">
+              ${normalizePlateOutput(entry.plateOutput) || getDropdownDisplayText('plateOutput', entry) || 'Click to select'}
             </option>
           </select>
         </td>
-        <td>${platePlanFmt}</td>
+        <td class="${plateNotRequired ? 'plate-field-disabled' : ''}" title="${plateNotRequired ? 'Not required when Plate Output is Not Required' : ''}">${plateNotRequired ? '—' : platePlanFmt}</td>
         <td>${plateActualFmt}</td>
         <td>${entry.plateRemark || ''}</td>
       </tr>`;
@@ -2824,6 +2903,12 @@ if (!entry) {
       // Capture old value before change (for derived logic)
       const oldValue = entry[field];
 
+      // Always persist the canonical Plate Output string (Pending / Done / Not Required)
+      if (field === 'plateOutput') {
+        newValue = normalizePlateOutput(newValue) || 'Pending';
+        target.value = newValue;
+      }
+
       // Track the modification (this will check if value is back to original)
       trackRowModification(rowId, entry, field, newValue);
 
@@ -2976,27 +3061,63 @@ if (!entry) {
         const oldPlatePerson = (oldValue || '').toString().trim();
         const newPlatePerson = (newValue || '').toString().trim();
         if (!oldPlatePerson && newPlatePerson) {
-          // Only when going from blank -> some person
-          const newPlateOutput = 'Pending';
-          if ((entry.plateOutput || '') !== newPlateOutput) {
-            entry.plateOutput = newPlateOutput;
-            trackRowModification(rowId, entry, 'plateOutput', newPlateOutput);
+          // Only when going from blank -> some person (and plate is not already closed)
+          if (!isPlateClosed(entry.plateOutput)) {
+            const newPlateOutput = 'Pending';
+            if ((entry.plateOutput || '') !== newPlateOutput) {
+              entry.plateOutput = newPlateOutput;
+              trackRowModification(rowId, entry, 'plateOutput', newPlateOutput);
 
-            // Update Plate Output dropdown in this row so the user sees "Pending" immediately
-            const plateOutputSelect = tr.querySelector(
-              'select.cell-select.editable[data-field="plateOutput"]'
-            );
-            if (plateOutputSelect) {
-              plateOutputSelect.dataset.initialValue = newPlateOutput;
-              const label = newPlateOutput || 'Click to select';
-              if (plateOutputSelect.options.length === 0) {
-                plateOutputSelect.add(new Option(label, newPlateOutput));
-              } else {
-                const opt = plateOutputSelect.options[0];
-                opt.value = newPlateOutput;
-                opt.textContent = label;
+              // Update Plate Output dropdown in this row so the user sees "Pending" immediately
+              const plateOutputSelect = tr.querySelector(
+                'select.cell-select.editable[data-field="plateOutput"]'
+              );
+              if (plateOutputSelect) {
+                plateOutputSelect.dataset.initialValue = newPlateOutput;
+                const label = newPlateOutput || 'Click to select';
+                if (plateOutputSelect.options.length === 0) {
+                  plateOutputSelect.add(new Option(label, newPlateOutput));
+                } else {
+                  const opt = plateOutputSelect.options[0];
+                  opt.value = newPlateOutput;
+                  opt.textContent = label;
+                }
+                plateOutputSelect.value = newPlateOutput;
               }
-              plateOutputSelect.value = newPlateOutput;
+            }
+          }
+        }
+      }
+
+      // When Plate Output becomes Not Required, grey out Plate Person / Plan (optional).
+      if (field === 'plateOutput') {
+        const notRequired = newValue === 'Not Required';
+        const platePersonSelect = tr.querySelector(
+          'select.cell-select.editable[data-field="platePerson"]'
+        );
+        const platePersonTd = platePersonSelect?.closest('td');
+        if (platePersonSelect) {
+          platePersonSelect.disabled = notRequired;
+          platePersonSelect.classList.toggle('plate-field-disabled', notRequired);
+          platePersonSelect.title = notRequired
+            ? 'Not required when Plate Output is Not Required'
+            : '';
+        }
+        if (platePersonTd) {
+          platePersonTd.classList.toggle('plate-field-disabled', notRequired);
+        }
+        // Plate Plan cell is immediately after Plate Output
+        const plateOutputTd = target.closest('td');
+        const planTd = plateOutputTd?.nextElementSibling;
+        if (planTd) {
+          planTd.classList.toggle('plate-field-disabled', notRequired);
+          if (notRequired) {
+            planTd.title = 'Not required when Plate Output is Not Required';
+            planTd.textContent = '—';
+          } else {
+            planTd.title = '';
+            if (entry.platePlan) {
+              planTd.textContent = formatDateDDMMYYYY(entry.platePlan) || '';
             }
           }
         }
@@ -3316,8 +3437,15 @@ if (!entry) {
         artworkRemark: formValues.artworkRemark || null,
         toolingRemark: formValues.toolingRemark || null,
         plateRemark: formValues.plateRemark || null,
+        // Always send canonical Plate Output — never blank/NULL (defaults to Pending)
+        plateOutput: normalizePlateOutput(formValues.plateOutput) || 'Pending',
         // Additional fields can be added here if needed
       };
+
+      // When plate is Not Required, omit plate person (optional)
+      if (payload.plateOutput === 'Not Required') {
+        payload.plateUserKey = null;
+      }
 
       // Call the unordered insert API
       const response = await fetch(`${API_BASE_URL}/unordered/insert`, {
@@ -3868,13 +3996,23 @@ if (!entry) {
       }
     }
     
-    // Show/hide update button based on selection
-    if (elements.userWiseUpdateBtn) {
-      if (count > 0) {
-        elements.userWiseUpdateBtn.style.display = 'flex';
-      } else {
-        elements.userWiseUpdateBtn.style.display = 'none';
-      }
+    // Show/hide Mark Done + Not Required split based on selection
+    if (elements.userWiseUpdateSplit) {
+      elements.userWiseUpdateSplit.style.display = count > 0 ? 'flex' : 'none';
+    } else if (elements.userWiseUpdateBtn) {
+      elements.userWiseUpdateBtn.style.display = count > 0 ? 'flex' : 'none';
+    }
+
+    // Not Required only applies to Plate Output rows — enable when at least one is selected
+    if (elements.userWiseNotRequiredBtn) {
+      const selected = getSelectedUserWiseRows();
+      const hasPlateRow = selected.some(
+        (r) => (r.Operation || '').toString().trim().toLowerCase() === 'plate output'
+      );
+      elements.userWiseNotRequiredBtn.disabled = !hasPlateRow;
+      elements.userWiseNotRequiredBtn.title = hasPlateRow
+        ? 'Mark selected Plate Output step(s) as Not Required'
+        : 'Select at least one Plate Output row';
     }
     
     // Show actions bar when there's data (for export button), hide when no data
@@ -4012,264 +4150,285 @@ if (!entry) {
     console.log(`✅ Exported ${window.userWiseResultsData.length} rows to Excel`);
   }
 
-  // Handle update button click - directly update with values from table cells
-  async function handleUserWiseUpdate() {
-    if (isUserWiseViewOnly()) {
-      return;
+  function buildUserWiseUpdateItems({ processOverride = null, remarkOverride = undefined } = {}) {
+    const checkboxes = elements.userWiseResultsTableBody.querySelectorAll('.user-wise-row-checkbox:checked');
+    const items = Array.from(checkboxes).map((checkbox) => {
+      const index = parseInt(checkbox.dataset.index, 10);
+      const rowData = window.userWiseResultsData[index];
+      if (!rowData) return null;
+
+      const row = checkbox.closest('tr');
+      const remarkInput = row?.querySelector('.user-wise-remark-input');
+      const linkInput = row?.querySelector('.user-wise-link-input');
+      const remarkFromCell = remarkInput?.value?.trim() || null;
+      const link = linkInput?.value?.trim() || null;
+      const remark =
+        remarkOverride !== undefined
+          ? (remarkOverride || remarkFromCell || null)
+          : remarkFromCell;
+
+      const operation = processOverride || rowData.Operation;
+      const baseItem = {
+        __SourceDB: rowData.__SourceDB,
+        Operation: operation,
+        Remark: remark,
+        Link: link,
+      };
+
+      if (rowData.__SourceDB === 'KOL_SQL' || rowData.__SourceDB === 'AMD_SQL') {
+        return { ...baseItem, ID: rowData.ID, ledgerid: rowData.ledgerid };
+      }
+      if (rowData.__SourceDB === 'MONGO_UNORDERED') {
+        return { ...baseItem, __MongoId: rowData.__MongoId || rowData.ID || null };
+      }
+      return null;
+    }).filter(Boolean);
+
+    return items.filter((item) => {
+      if (item.__SourceDB === 'MONGO_UNORDERED') return !!item.__MongoId;
+      if (item.__SourceDB === 'KOL_SQL' || item.__SourceDB === 'AMD_SQL') {
+        return !!item.ID && !!item.ledgerid;
+      }
+      return false;
+    });
+  }
+
+  function formatUserWiseUpdateErrors(result) {
+    const errorList = Array.isArray(result?.errors)
+      ? result.errors
+      : Array.isArray(result?.errorDetails)
+        ? result.errorDetails
+        : [];
+    if (!errorList.length) {
+      if (typeof result?.error === 'string' && result.error) return result.error;
+      return '';
     }
+    return errorList
+      .map((e) => {
+        const op = e?.item?.Operation || e?.item?.Process || '';
+        const id = e?.item?.ID || e?.item?.__MongoId || '';
+        const msg = e?.error || e?.message || 'Unknown error';
+        return `• ${op || 'Item'}${id ? ` (${id})` : ''}: ${msg}`;
+      })
+      .join('\n');
+  }
+
+  async function refreshUserWisePendingAfterUpdate() {
+    if (!window.userWiseCurrentUsername) return;
+    const displayName = window.userWiseCurrentUsername;
+    showLoading();
+    const prepressApiBaseUrl =
+      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? 'http://localhost:3001/api/prepress'
+        : 'https://cdcapi.onrender.com/api/prepress';
+    try {
+      const refreshResponse = await fetch(
+        `${prepressApiBaseUrl}/pending?username=${encodeURIComponent(displayName)}`
+      );
+      const refreshResult = await refreshResponse.json();
+      if (refreshResponse.ok && refreshResult.ok) {
+        window.userWiseAllData = refreshResult.data || [];
+        applyUserWiseFilters();
+        if (elements.userWiseSelectedCount) {
+          elements.userWiseSelectedCount.innerHTML = '<strong>0</strong> item(s) selected';
+        }
+        if (elements.userWiseSelectAll) {
+          elements.userWiseSelectAll.checked = false;
+          elements.userWiseSelectAll.indeterminate = false;
+        }
+        if (elements.userWiseUpdateSplit) {
+          elements.userWiseUpdateSplit.style.display = 'none';
+        }
+      }
+    } catch (refreshError) {
+      console.error('[USER WISE] Error refreshing data after update:', refreshError);
+    } finally {
+      hideLoading();
+    }
+  }
+
+  function setUserWiseActionButtonsBusy(busy, activeBtn) {
+    const buttons = [elements.userWiseUpdateBtn, elements.userWiseNotRequiredBtn].filter(Boolean);
+    buttons.forEach((btn) => {
+      if (busy) {
+        if (!btn.dataset.originalHTML) btn.dataset.originalHTML = btn.innerHTML;
+        btn.disabled = true;
+        if (btn === activeBtn) {
+          btn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;">
+              <circle cx="12" cy="12" r="10"></circle>
+              <path d="M12 6v6l4 2"></path>
+            </svg>
+            Updating...
+          `;
+        }
+      } else {
+        btn.disabled = false;
+        if (btn.dataset.originalHTML) {
+          btn.innerHTML = btn.dataset.originalHTML;
+        }
+      }
+    });
+    // Re-apply Not Required enablement based on current selection
+    if (!busy) updateSelectedCount();
+  }
+
+  // Handle Mark Done — posts each row's Operation (e.g. "Plate Output")
+  async function handleUserWiseUpdate() {
+    if (isUserWiseViewOnly()) return;
     const selectedRows = getSelectedUserWiseRows();
-    
     if (selectedRows.length === 0) {
       alert('Please select at least one item to update.');
       return;
     }
-    
-    console.log('[USER WISE] Update button clicked. Selected rows:', selectedRows);
-    
-    // Get remarks and links from editable table cells
-    const checkboxes = elements.userWiseResultsTableBody.querySelectorAll('.user-wise-row-checkbox:checked');
-    
-    
-    // Prepare API payload - handle both SQL and MongoDB items
-    // Get remark and link from each row's input fields
-    const items = Array.from(checkboxes).map((checkbox) => {
-      const index = parseInt(checkbox.dataset.index);
-      const rowData = window.userWiseResultsData[index];
-      
-      console.log(`[USER WISE UPDATE] Processing row ${index}:`, {
-        rowData,
-        hasRowData: !!rowData,
-        __SourceDB: rowData?.__SourceDB,
-        __MongoId: rowData?.__MongoId,
-        ID: rowData?.ID,
-        Operation: rowData?.Operation
-      });
-      
-      if (!rowData) {
-        console.warn(`[USER WISE UPDATE] Row ${index} has no rowData!`);
-        return null;
-      }
-      
-      // Find the corresponding row in the table
-      const row = checkbox.closest('tr');
-      const remarkInput = row?.querySelector('.user-wise-remark-input');
-      const linkInput = row?.querySelector('.user-wise-link-input');
-      
-      // Get values from inputs
-      const remark = remarkInput?.value?.trim() || null;
-      const link = linkInput?.value?.trim() || null;
-      
-      const baseItem = {
-        __SourceDB: rowData.__SourceDB,
-        Operation: rowData.Operation,
-        Remark: remark,
-        Link: link
-      };
-      
-      // For SQL items, include ID and ledgerid
-      if (rowData.__SourceDB === 'KOL_SQL' || rowData.__SourceDB === 'AMD_SQL') {
-        const sqlItem = {
-          ...baseItem,
-          ID: rowData.ID,
-          ledgerid: rowData.ledgerid
-        };
-        console.log(`[USER WISE UPDATE] SQL item prepared:`, sqlItem);
-        return sqlItem;
-      }
-      
-      // For MongoDB items, include __MongoId (fallback to ID if __MongoId not present)
-      if (rowData.__SourceDB === 'MONGO_UNORDERED') {
-        const mongoId = rowData.__MongoId || rowData.ID || null;
-        const mongoItem = {
-          ...baseItem,
-          __MongoId: mongoId
-        };
-        console.log(`[USER WISE UPDATE] MongoDB item prepared:`, {
-          ...mongoItem,
-          mongoIdFromRowData: rowData.__MongoId,
-          idFromRowData: rowData.ID,
-          finalMongoId: mongoId
-        });
-        return mongoItem;
-      }
-      
-      // Unknown source type
-      console.warn(`[USER WISE UPDATE] Unknown __SourceDB: ${rowData.__SourceDB}`);
-      return null;
-    }).filter(item => item !== null);
-    
-    console.log(`[USER WISE UPDATE] All prepared items (${items.length}):`, items);
-    
-    // Check if we have valid items
-    const validItems = items.filter(item => {
-      if (item.__SourceDB === 'MONGO_UNORDERED') {
-        const isValid = !!item.__MongoId;
-        console.log(`[USER WISE UPDATE] MongoDB item validation:`, {
-          __SourceDB: item.__SourceDB,
-          __MongoId: item.__MongoId,
-          isValid: isValid
-        });
-        return isValid;
-      } else if (item.__SourceDB === 'KOL_SQL' || item.__SourceDB === 'AMD_SQL') {
-        const isValid = !!item.ID && !!item.ledgerid;
-        console.log(`[USER WISE UPDATE] SQL item validation:`, {
-          __SourceDB: item.__SourceDB,
-          ID: item.ID,
-          ledgerid: item.ledgerid,
-          isValid: isValid
-        });
-        return isValid;
-      }
-      console.warn(`[USER WISE UPDATE] Unknown __SourceDB in validation: ${item.__SourceDB}`);
-      return false;
-    });
-    
-    console.log(`[USER WISE UPDATE] Validation results: ${validItems.length} valid out of ${items.length} total items`);
-    
-    if (validItems.length === 0) {
-      console.error(`[USER WISE UPDATE] No valid items found! Items:`, items);
-      console.error(`[USER WISE UPDATE] window.userWiseResultsData sample:`, window.userWiseResultsData?.slice(0, 2));
-      alert('No valid items to update. Please ensure selected items have required fields.\n\nCheck browser console for details.');
+
+    const itemsToUpdate = buildUserWiseUpdateItems();
+    if (itemsToUpdate.length === 0) {
+      alert('No valid items to update. Please ensure selected items have required fields.');
       return;
     }
-    
-    // Use only valid items
-    const itemsToUpdate = validItems;
-    
-    console.log('[USER WISE UPDATE] Final items being sent to API:', itemsToUpdate);
-    console.log('[USER WISE UPDATE] MongoDB items in payload:', 
-      itemsToUpdate.filter(item => item.__SourceDB === 'MONGO_UNORDERED').map(item => ({
-        __SourceDB: item.__SourceDB,
-        __MongoId: item.__MongoId,
-        Operation: item.Operation,
-        Remark: item.Remark,
-        Link: item.Link
-      }))
-    );
-    
-    // Disable update button and show loading state
-    if (elements.userWiseUpdateBtn) {
-      elements.userWiseUpdateBtn.disabled = true;
-      const originalHTML = elements.userWiseUpdateBtn.innerHTML;
-      elements.userWiseUpdateBtn.innerHTML = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation: spin 1s linear infinite;">
-          <circle cx="12" cy="12" r="10"></circle>
-          <path d="M12 6v6l4 2"></path>
-        </svg>
-        Updating...
-      `;
-      
-      // Store original HTML for restoration
-      elements.userWiseUpdateBtn.dataset.originalHTML = originalHTML;
-    }
-    
+
+    setUserWiseActionButtonsBusy(true, elements.userWiseUpdateBtn);
+
     try {
-      // Construct API URL
-      const apiBaseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        ? 'http://localhost:3001/api/prepress'
-        : 'https://cdcapi.onrender.com/api/prepress';
-      
-      const apiUrl = `${apiBaseUrl}/pending/update`;
-      
-      const response = await fetch(apiUrl, {
+      const apiBaseUrl =
+        window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+          ? 'http://localhost:3001/api/prepress'
+          : 'https://cdcapi.onrender.com/api/prepress';
+
+      const response = await fetch(`${apiBaseUrl}/pending/update`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ items: itemsToUpdate })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: itemsToUpdate }),
       });
-      
+
       const result = await response.json();
-      
+      const errorText = formatUserWiseUpdateErrors(result);
+
       if (!response.ok || !result.ok) {
-        throw new Error(result.error || 'Update failed');
+        throw new Error(result.error || errorText || 'Update failed');
       }
-      
-      console.log('[USER WISE] Update successful:', result);
-      
-      // Show success message
+
       const successCount = result.success || 0;
-      const errorCount = result.errors || 0;
+      const errorList = Array.isArray(result.errors) ? result.errors : [];
       const skippedCount = result.skipped || 0;
-      
+
       let message = `Successfully updated ${successCount} item(s).`;
-      if (errorCount > 0) {
-        message += `\n${errorCount} item(s) had errors.`;
+      if (errorList.length > 0) {
+        message += `\n\n${errorList.length} item(s) had errors:\n${errorText}`;
       }
-      
       if (skippedCount > 0) {
         message += `\n${skippedCount} item(s) were skipped.`;
       }
-      
       alert(message);
-      
-      // Refresh the user-wise pending list after successful update
-      // Use the stored username from when Get was clicked
-      if (window.userWiseCurrentUsername) {
-        // Store current selected checkboxes state might be lost, but that's okay since we're refreshing
-        // Close the modal and re-fetch data
-        const displayName = window.userWiseCurrentUsername;
-        
-        // Show loading overlay
-        showLoading();
-        
-        // Construct API URL
-        const prepressApiBaseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-          ? 'http://localhost:3001/api/prepress'
-          : 'https://cdcapi.onrender.com/api/prepress';
-        
-        const apiUrl = `${prepressApiBaseUrl}/pending?username=${encodeURIComponent(displayName)}`;
-        
-        try {
-          const refreshResponse = await fetch(apiUrl);
-          const refreshResult = await refreshResponse.json();
-          
-          if (refreshResponse.ok && refreshResult.ok) {
-            // Store all data for filtering
-            window.userWiseAllData = refreshResult.data || [];
-            
-            // Apply filters and display results
-            applyUserWiseFilters();
-            
-            // Hide actions bar and clear selections after successful update
-            if (elements.userWiseResultsActions) {
-              elements.userWiseResultsActions.style.display = 'none';
-            }
-            if (elements.userWiseSelectedCount) {
-              elements.userWiseSelectedCount.innerHTML = '<strong>0</strong> item(s) selected';
-            }
-            if (elements.userWiseSelectAll) {
-              elements.userWiseSelectAll.checked = false;
-              elements.userWiseSelectAll.indeterminate = false;
-            }
-            
-            console.log('[USER WISE] Data refreshed after update');
-          }
-        } catch (refreshError) {
-          console.error('[USER WISE] Error refreshing data after update:', refreshError);
-          // Don't show error to user since update was successful
-        } finally {
-          hideLoading();
-        }
+
+      if (successCount > 0) {
+        await refreshUserWisePendingAfterUpdate();
       }
-      
     } catch (error) {
       console.error('[USER WISE] Update error:', error);
-      alert(`Error updating items: ${error.message}`);
+      alert(error.message || 'Error updating items');
     } finally {
-      // Re-enable update button
-      if (elements.userWiseUpdateBtn) {
-        elements.userWiseUpdateBtn.disabled = false;
-        const originalHTML = elements.userWiseUpdateBtn.dataset.originalHTML || `
-          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-            <polyline points="17 8 12 3 7 8"></polyline>
-            <line x1="12" y1="3" x2="12" y2="15"></line>
-          </svg>
-          Update
-        `;
-        elements.userWiseUpdateBtn.innerHTML = originalHTML;
+      setUserWiseActionButtonsBusy(false, elements.userWiseUpdateBtn);
+    }
+  }
+
+  // Handle Not Required — same endpoint, Process = "Plate Not Required" (plate rows only)
+  async function handleUserWiseNotRequired() {
+    if (isUserWiseViewOnly()) return;
+
+    const selectedRows = getSelectedUserWiseRows();
+    const plateRows = selectedRows.filter(
+      (r) => (r.Operation || '').toString().trim().toLowerCase() === 'plate output'
+    );
+
+    if (plateRows.length === 0) {
+      alert('Select at least one Plate Output row to mark as Not Required.');
+      return;
+    }
+
+    const remarkPrompt = window.prompt(
+      'Optional remark for Not Required (e.g. digital only, reprint — existing plates):',
+      ''
+    );
+    if (remarkPrompt === null) return; // cancelled
+
+    // Build items only for plate rows, with Process override
+    const checkboxes = elements.userWiseResultsTableBody.querySelectorAll('.user-wise-row-checkbox:checked');
+    const itemsToUpdate = [];
+    checkboxes.forEach((checkbox) => {
+      const index = parseInt(checkbox.dataset.index, 10);
+      const rowData = window.userWiseResultsData?.[index];
+      if (!rowData) return;
+      if ((rowData.Operation || '').toString().trim().toLowerCase() !== 'plate output') return;
+
+      const row = checkbox.closest('tr');
+      const remarkFromCell = row?.querySelector('.user-wise-remark-input')?.value?.trim() || null;
+      const link = row?.querySelector('.user-wise-link-input')?.value?.trim() || null;
+      const remark = (remarkPrompt || '').trim() || remarkFromCell || null;
+
+      const baseItem = {
+        __SourceDB: rowData.__SourceDB,
+        Operation: 'Plate Not Required',
+        Remark: remark,
+        Link: link,
+      };
+
+      if (rowData.__SourceDB === 'KOL_SQL' || rowData.__SourceDB === 'AMD_SQL') {
+        if (rowData.ID && rowData.ledgerid) {
+          itemsToUpdate.push({ ...baseItem, ID: rowData.ID, ledgerid: rowData.ledgerid });
+        }
+      } else if (rowData.__SourceDB === 'MONGO_UNORDERED') {
+        const mongoId = rowData.__MongoId || rowData.ID || null;
+        if (mongoId) itemsToUpdate.push({ ...baseItem, __MongoId: mongoId });
       }
+    });
+
+    if (itemsToUpdate.length === 0) {
+      alert('No valid Plate Output items to update.');
+      return;
+    }
+
+    // Disable immediately to prevent double-click re-stamping
+    setUserWiseActionButtonsBusy(true, elements.userWiseNotRequiredBtn);
+
+    try {
+      const apiBaseUrl =
+        window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+          ? 'http://localhost:3001/api/prepress'
+          : 'https://cdcapi.onrender.com/api/prepress';
+
+      const response = await fetch(`${apiBaseUrl}/pending/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: itemsToUpdate }),
+      });
+
+      const result = await response.json();
+      const errorText = formatUserWiseUpdateErrors(result);
+
+      if (!response.ok || !result.ok) {
+        throw new Error(result.error || errorText || 'Update failed');
+      }
+
+      const successCount = result.success || 0;
+      const errorList = Array.isArray(result.errors) ? result.errors : [];
+
+      let message = `Marked ${successCount} plate step(s) as Not Required.`;
+      if (errorList.length > 0) {
+        message += `\n\n${errorList.length} item(s) had errors:\n${errorText}`;
+      }
+      alert(message);
+
+      if (successCount > 0) {
+        await refreshUserWisePendingAfterUpdate();
+      }
+    } catch (error) {
+      console.error('[USER WISE] Not Required error:', error);
+      // Surface SP messages like "already marked Done" / "already closed"
+      alert(error.message || 'Error marking plate as Not Required');
+    } finally {
+      setUserWiseActionButtonsBusy(false, elements.userWiseNotRequiredBtn);
     }
   }
 
@@ -4575,7 +4734,7 @@ if (!entry) {
     if (noRows) {
       if (elements.userWiseCompletedResultsEmpty) elements.userWiseCompletedResultsEmpty.style.display = hasLoadedData ? 'none' : 'block';
       if (hasLoadedData) {
-        elements.userWiseCompletedResultsTableBody.innerHTML = '<tr><td colspan="14" style="text-align:center;padding:2rem;color:var(--text-muted);font-size:0.9rem;">No rows match your filters. Clear column filters or change source filters to see data.</td></tr>';
+        elements.userWiseCompletedResultsTableBody.innerHTML = '<tr><td colspan="15" style="text-align:center;padding:2rem;color:var(--text-muted);font-size:0.9rem;">No rows match your filters. Clear column filters or change source filters to see data.</td></tr>';
         if (elements.userWiseCompletedResultsTableContainer) elements.userWiseCompletedResultsTableContainer.style.display = 'block';
       } else {
         elements.userWiseCompletedResultsTableBody.innerHTML = '';
@@ -4591,22 +4750,27 @@ if (!entry) {
       return;
     }
 
-    const rowsHtml = data.map((item) => `<tr>
+    const rowsHtml = data.map((item) => {
+      // EmployeeName / Executive may be blank for Not Required plate rows — render safely
+      const executive = (item.Executive || item.EmployeeName || '').toString();
+      return `<tr>
       <td>${(item.PONumber || '').replace(/"/g, '&quot;')}</td>
       <td>${formatDateDDMMMYYYY(item.PODate)}</td>
       <td>${(item.Jobcardnumber || '').replace(/"/g, '&quot;')}</td>
-      <td>${(item.Executive || '').replace(/"/g, '&quot;')}</td>
+      <td>${executive.replace(/"/g, '&quot;')}</td>
       <td>${(item.ClientName || '').replace(/"/g, '&quot;')}</td>
       <td>${(item.RefMISCode || '').replace(/"/g, '&quot;')}</td>
       <td title="${(item.JobName || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}">${(item.JobName || '').replace(/"/g, '&quot;')}</td>
       <td>${(item.Division || '').replace(/"/g, '&quot;')}</td>
       <td>${formatDateDDMMMYYYY(item.FileReceivedDate)}</td>
       <td>${(item.Operation || '').replace(/"/g, '&quot;')}</td>
+      <td>${formatStatusChip(item.Status)}</td>
       <td title="${(item.Remarks || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}">${(item.Remarks || '').replace(/"/g, '&quot;')}</td>
       <td>${(item.Link || '').replace(/"/g, '&quot;')}</td>
       <td>${formatDateDDMMMYYYY(item.PlanDate)}</td>
       <td>${formatDateDDMMMYYYY(item.ActualDate)}</td>
-    </tr>`).join('');
+    </tr>`;
+    }).join('');
 
     elements.userWiseCompletedResultsTableBody.innerHTML = rowsHtml;
     if (elements.userWiseCompletedResultsEmpty) elements.userWiseCompletedResultsEmpty.style.display = 'none';
@@ -4674,6 +4838,7 @@ if (!entry) {
     filterInputs.forEach((input) => {
       if (input.dataset.boundCompletedFilter === '1') return;
       input.addEventListener('input', () => debouncedApplyFilters());
+      input.addEventListener('change', () => debouncedApplyFilters());
       input.dataset.boundCompletedFilter = '1';
     });
   }
@@ -4718,7 +4883,7 @@ if (!entry) {
       return;
     }
 
-    const headers = ['PO Number', 'PO Date', 'Jobcard Number', 'Executive', 'Client Name', 'Ref MIS Code', 'Job Name', 'Division', 'File Received Date', 'Operation', 'Remarks', 'Link', 'Plan Date', 'Actual Date'];
+    const headers = ['PO Number', 'PO Date', 'Jobcard Number', 'Executive', 'Client Name', 'Ref MIS Code', 'Job Name', 'Division', 'File Received Date', 'Operation', 'Status', 'Remarks', 'Link', 'Plan Date', 'Actual Date'];
     const escapeCSV = (value) => {
       if (value === null || value === undefined) return '';
       const str = String(value);
@@ -4734,13 +4899,14 @@ if (!entry) {
         item.PONumber || '',
         formatDateDDMMMYYYY(item.PODate) || '',
         item.Jobcardnumber || '',
-        item.Executive || '',
+        item.Executive || item.EmployeeName || '',
         item.ClientName || '',
         item.RefMISCode || '',
         item.JobName || '',
         item.Division || '',
         formatDateDDMMMYYYY(item.FileReceivedDate) || '',
         item.Operation || '',
+        item.Status || '',
         item.Remarks || '',
         item.Link || '',
         formatDateDDMMMYYYY(item.PlanDate) || '',
@@ -4893,6 +5059,10 @@ if (!entry) {
   // User Wise Update Button
   if (elements.userWiseUpdateBtn) {
     elements.userWiseUpdateBtn.addEventListener('click', handleUserWiseUpdate);
+  }
+
+  if (elements.userWiseNotRequiredBtn) {
+    elements.userWiseNotRequiredBtn.addEventListener('click', handleUserWiseNotRequired);
   }
 
   // User Wise Export Button
@@ -5059,6 +5229,20 @@ if (!entry) {
     elements.modalOverlay.addEventListener('click', closeAddEntryModal);
   }
 
+  function syncAddEntryPlateFields() {
+    const plateOutputSelect = document.getElementById('form-plateOutput');
+    const platePersonSelect = document.getElementById('form-platePerson');
+    const hint = document.getElementById('form-platePerson-hint');
+    if (!plateOutputSelect || !platePersonSelect) return;
+    const notRequired = normalizePlateOutput(plateOutputSelect.value) === 'Not Required';
+    platePersonSelect.disabled = notRequired;
+    platePersonSelect.classList.toggle('plate-field-disabled', notRequired);
+    if (notRequired) {
+      platePersonSelect.value = '';
+    }
+    if (hint) hint.style.display = notRequired ? 'block' : 'none';
+  }
+
   if (elements.addEntryForm) {
     elements.addEntryForm.addEventListener('submit', handleAddEntrySubmit);
     
@@ -5068,6 +5252,12 @@ if (!entry) {
       divisionSelect.addEventListener('change', (e) => {
         updatePersonDropdowns(e.target.value);
       });
+    }
+
+    const plateOutputSelect = document.getElementById('form-plateOutput');
+    if (plateOutputSelect) {
+      plateOutputSelect.addEventListener('change', syncAddEntryPlateFields);
+      syncAddEntryPlateFields();
     }
   }
 
