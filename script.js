@@ -3,10 +3,15 @@
 
   // API Configuration
   // Backend for pending artwork API: GET /api/artwork/pending
-  // - When running locally (localhost), use local backend
-  // - Otherwise, use the deployed backend URL
+  // file:// (double-click / start index.html) has an empty hostname — treat as local.
+  function isLocalFrontend() {
+    const protocol = window.location.protocol || '';
+    const host = String(window.location.hostname || '').toLowerCase();
+    return protocol === 'file:' || !host || host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  }
+
   const API_BASE_URL =
-    window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    isLocalFrontend()
       ? 'http://localhost:3001/api/artwork'
       : 'https://cdcapi.onrender.com/api/artwork';
 
@@ -72,6 +77,62 @@
     const n = normalizePlateOutput(value);
     if (!n) return true;
     return n.toUpperCase() === 'PENDING';
+  }
+
+  const TOOLING_OPEN = 'REQUIRED';
+  const TOOLING_VALUES = ['NA', 'Old', 'Ordered', 'Required', 'Received'];
+
+  function normalizeToolingStatus(value) {
+    const t = (value ?? '').toString().trim();
+    if (!t) return 'NA';
+    const u = t.toUpperCase();
+    if (u === 'NA' || u === 'N/A' || u === 'N.A.') return 'NA';
+    if (u === 'OLD') return 'Old';
+    if (u === 'ORDERED') return 'Ordered';
+    if (u === 'REQUIRED') return 'Required';
+    if (u === 'RECEIVED') return 'Received';
+    return t;
+  }
+
+  function isToolingOpen(die, block, blanket) {
+    return [die, block, blanket].some((v) => normalizeToolingStatus(v).toUpperCase() === TOOLING_OPEN);
+  }
+
+  function computeToolingState(die, block, blanket) {
+    const vals = [die, block, blanket].map((v) => normalizeToolingStatus(v).toUpperCase());
+    if (vals.some((v) => v === TOOLING_OPEN)) return 'Open';
+    if (vals.every((v) => v === 'NA')) return 'Not Applicable';
+    return 'Closed';
+  }
+
+  function computeToolingSummary(die, block, blanket) {
+    const d = normalizeToolingStatus(die);
+    const b = normalizeToolingStatus(block);
+    const bl = normalizeToolingStatus(blanket);
+    if (d === 'NA' && b === 'NA' && bl === 'NA') return '';
+    const parts = [];
+    if (d !== 'NA') parts.push(`Die: ${d}`);
+    if (b !== 'NA') parts.push(`Block: ${b}`);
+    if (bl !== 'NA') parts.push(`Blanket: ${bl}`);
+    return parts.join(', ');
+  }
+
+  function toolingStatusOptionsHtml(current) {
+    const n = normalizeToolingStatus(current);
+    return TOOLING_VALUES.map(
+      (v) => `<option value="${v}" ${n === v ? 'selected' : ''}>${v}</option>`
+    ).join('');
+  }
+
+  function formatToolingStateChip(state) {
+    const raw = (state || '').toString().trim();
+    if (!raw) return '';
+    const upper = raw.toUpperCase();
+    let cls = 'status-chip';
+    if (upper === 'CLOSED') cls += ' status-chip-success';
+    else if (upper === 'OPEN') cls += ' status-chip-pending';
+    else cls += ' status-chip-neutral';
+    return `<span class="${cls}">${raw.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</span>`;
   }
 
   function formatStatusChip(status) {
@@ -521,8 +582,17 @@
       return;
     }
 
+    if (isToolingUser()) {
+      state.pendingUpdates.forEach((pending) => {
+        if (!pending?.updates) return;
+        Object.keys(pending.updates).forEach((key) => {
+          if (!TOOLING_EDIT_FIELDS.has(key)) delete pending.updates[key];
+        });
+      });
+    }
+
     // Frontend validation: in main pending view, certain columns must not be blank
-    if (state.currentView === 'pending') {
+    if (state.currentView === 'pending' && !isToolingUser()) {
       const requiredFieldDefs = [
         { key: 'file', label: 'File' },
         { key: 'softApprovalReqd', label: 'Soft Approval Reqd' },
@@ -565,6 +635,12 @@
           if (key === 'platePerson' && plateNotRequired) return;
           if (key === 'plateOutput') {
             // already defaulted above
+            return;
+          }
+          // Blank tooling is NA — do not block save
+          if (key === 'toolingDie' || key === 'toolingBlock' || key === 'blanket') {
+            const raw = resolveField(key);
+            if (!raw && updates) updates[key] = 'NA';
             return;
           }
           const val = resolveField(key);
@@ -736,6 +812,9 @@
             if (field === 'plateOutput') {
               backendValue = normalizePlateOutput(backendValue) || 'Pending';
             }
+            if (field === 'toolingDie' || field === 'toolingBlock' || field === 'blanket') {
+              backendValue = normalizeToolingStatus(backendValue);
+            }
             // Never send PlateActual — backend stamps it for Done / Not Required
             if (backendField === 'PlateActual' || field === 'plateActual') {
               return;
@@ -842,6 +921,28 @@
 
         // Show success
         alert(`✅ Successfully updated ${succeeded} row(s)!`);
+
+        // Reopening tooling from Completed moves the job back to Pending — switch view so it is visible.
+        const toolingReopenedFromCompleted =
+          state.currentView === 'completed' &&
+          updatedRowIds.some(({ updates: rowUpdates, entry }) => {
+            const changedTooling = Object.keys(rowUpdates || {}).some((field) =>
+              field === 'toolingDie' || field === 'toolingBlock' || field === 'blanket'
+            );
+            if (!changedTooling) return false;
+            const nextDie = rowUpdates.toolingDie ?? entry.toolingDie;
+            const nextBlock = rowUpdates.toolingBlock ?? entry.toolingBlock;
+            const nextBlanket = rowUpdates.blanket ?? entry.blanket;
+            return isToolingOpen(nextDie, nextBlock, nextBlanket);
+          });
+        if (toolingReopenedFromCompleted) {
+          state.currentView = 'pending';
+          if (elements.btnViewPending) elements.btnViewPending.classList.add('active');
+          if (elements.btnViewCompleted) elements.btnViewCompleted.classList.remove('active');
+          if (elements.btnAddEntry) {
+            elements.btnAddEntry.style.display = isToolingUser() ? 'none' : 'flex';
+          }
+        }
 
         // Refresh table data
         await fetchEntries();
@@ -1031,6 +1132,7 @@
       // Division / site
       division: row.Division || row.division || row.__Site || '',
       segmentName: row.SegmentName || row.segmentName || '',
+      categoryName: row.CategoryName || row.categoryName || '',
 
       // People
       prepressPerson: row.PrepressPerson || row.PrepressPersonName || '',
@@ -1071,10 +1173,12 @@
       // Tooling / plate / remarks
       artworkRemark: row.ArtworkRemark || row.ArtworkRemarkText || '',
       toolingPerson: row.ToolingPerson || '',
-      toolingDie: row.ToolingDie || '',
-      toolingBlock: row.ToolingBlock || '',
+      toolingDie: normalizeToolingStatus(row.ToolingDie),
+      toolingBlock: normalizeToolingStatus(row.ToolingBlock),
       toolingRemark: row.ToolingRemark || '',
-      blanket: row.Blanket || '',
+      blanket: normalizeToolingStatus(row.Blanket),
+      toolingState: row.ToolingState || computeToolingState(row.ToolingDie, row.ToolingBlock, row.Blanket),
+      toolingSummary: row.ToolingSummary ?? computeToolingSummary(row.ToolingDie, row.ToolingBlock, row.Blanket),
       toolingBlanketPlan: toDate(row.ToolingBlanketPlan || row.ToolingBlanketPlanDate),
       toolingBlanketActual: toDate(row.ToolingBlanketActual || row.ToolingBlanketActualDate),
       platePerson: row.PlatePerson || '',
@@ -1145,8 +1249,8 @@
 
   // Fetch entries from API
   async function fetchEntries() {
-    // Skip admin-grid fetch for DB users (role=user). Admin and executive
-    // accounts both see the main pending grid.
+    // Skip admin-grid fetch for DB users (role=user). Admin, executive, and
+    // tooling accounts all see the main pending grid.
     try {
       const __sess = JSON.parse(localStorage.getItem('prepressFmsAuth') || 'null');
       if (__sess && __sess.role === 'user') {
@@ -1302,6 +1406,10 @@
       }
       
       if (!matchesSource) {
+        return false;
+      }
+
+      if (!rowMatchesArtworkScope(entry, getArtworkScope())) {
         return false;
       }
 
@@ -1511,6 +1619,7 @@
 
   // Get class for editable cell
   function getEditableClass(baseClass, entryId, field) {
+    if (!canEditMainGridField(field)) return baseClass;
     const modified = isFieldModified(entryId, field) ? ' modified' : '';
     return `${baseClass} editable${modified}`;
   }
@@ -1554,6 +1663,10 @@
     // For boolean approval fields, format as Yes/No
     if (field === 'softApprovalReqd' || field === 'hardApprovalReqd' || field === 'mProofApprovalReqd') {
       return formatBoolean(value);
+    }
+
+    if (field === 'toolingDie' || field === 'toolingBlock' || field === 'blanket') {
+      return normalizeToolingStatus(value);
     }
     
     return String(value);
@@ -1614,16 +1727,7 @@
       case 'toolingDie':
       case 'toolingBlock':
       case 'blanket':
-        // Normalized current value for comparison
-        const normVal = (currentValue || '').toString().trim();
-        return `
-          <option value=""></option>
-          <option value="NA" ${normVal === 'NA' ? 'selected' : ''}>NA</option>
-          <option value="Old" ${normVal === 'Old' ? 'selected' : ''}>Old</option>
-          <option value="Ordered" ${normVal === 'Ordered' ? 'selected' : ''}>Ordered</option>
-          <option value="Required" ${normVal === 'Required' ? 'selected' : ''}>Required</option>
-          <option value="Received" ${normVal === 'Received' ? 'selected' : ''}>Received</option>
-        `;
+        return toolingStatusOptionsHtml(currentValue);
 
       case 'plateOutput': {
         const plateNorm = normalizePlateOutput(currentValue);
@@ -2651,7 +2755,8 @@
     
     // Set initial Add Entry button visibility based on current view
     if (elements.btnAddEntry) {
-      elements.btnAddEntry.style.display = state.currentView === 'pending' ? 'flex' : 'none';
+      elements.btnAddEntry.style.display =
+        state.currentView === 'pending' && !isToolingUser() ? 'flex' : 'none';
     }
     
     // Clear filters button handler
@@ -2740,6 +2845,11 @@
         // console.log('⏭️  [EVENT] No editable target found, skipping');
         return;
       }
+
+      const attemptedField = target.dataset.field;
+      if (attemptedField && !canEditMainGridField(attemptedField)) {
+        return;
+      }
       
       // console.log('✅ [EVENT] Target is editable, processing...');
 
@@ -2768,6 +2878,10 @@
 
       if (!field) {
         // console.error('❌ [EDIT] Could not determine field name for editable cell', target);
+        return;
+      }
+
+      if (!canEditMainGridField(field)) {
         return;
       }
 
@@ -3221,7 +3335,7 @@ if (!entry) {
         elements.btnViewCompleted.classList.remove('active');
         // Show Add Entry button for pending view only
         if (elements.btnAddEntry) {
-          elements.btnAddEntry.style.display = 'flex';
+          elements.btnAddEntry.style.display = isToolingUser() ? 'none' : 'flex';
         }
         // Fetch entries from pending endpoint
         fetchEntries();
@@ -3322,7 +3436,7 @@ if (!entry) {
       if (elements.formTokenValue) {
         elements.formTokenValue.textContent = 'Loading...';
       }
-      const apiBase = 'https://cdcapi.onrender.com';
+      const apiBase = isLocalFrontend() ? 'http://localhost:3001' : 'https://cdcapi.onrender.com';
 
       fetch(`${apiBase}/api/artwork/unordered/next-token`)
         .then(res => res.json())
@@ -3627,6 +3741,10 @@ if (!entry) {
         if (!matchesSource) {
           return false;
         }
+
+        if (!rowMatchesArtworkScope(item, getArtworkScope())) {
+          return false;
+        }
         
         // Apply column filters
         for (const [column, filterValue] of Object.entries(columnFilters)) {
@@ -3720,23 +3838,90 @@ if (!entry) {
   }
 
   function isUserWiseViewOnly() {
-    try {
-      const s = JSON.parse(localStorage.getItem('prepressFmsAuth') || 'null');
-      return !!(s && s.role === 'executive');
-    } catch (_) {
-      return false;
-    }
+    const s = getSession();
+    return !!(s && s.role === 'executive');
+  }
+
+  function isToolingUser() {
+    const s = getSession();
+    return !!(s && s.role === 'tooling');
+  }
+
+  function getArtworkScope() {
+    const s = getSession();
+    return s?.artworkScope || null;
+  }
+
+  function getArtworkKind(row) {
+    if (!row) return '';
+    const raw = row.__raw || {};
+    const isMongo =
+      row.__SourceDB === 'MONGO_UNORDERED' || raw.__SourceDB === 'MONGO_UNORDERED';
+    const siteLike = /^(COMMON|KOLKATA|AHMEDABAD)$/i;
+    const clean = (v) => {
+      const s = String(v || '').trim();
+      if (!s || siteLike.test(s)) return '';
+      return s.toUpperCase();
+    };
+
+    // Segment is the source of truth (Commercial vs Packaging).
+    // Do not use category substring "PACK" — Compact/Impact/Packet false-match as packaging.
+    const segmentText = [
+      row.segmentName, row.SegmentName, row.segment,
+      raw.SegmentName, raw.segmentName, raw.segment,
+      isMongo ? row.Division : '',
+      isMongo ? raw.Division : '',
+      isMongo ? row.division : '',
+    ].map(clean).filter(Boolean).join(' ');
+
+    if (segmentText.includes('PACKAGING')) return 'packaging';
+    if (segmentText.includes('COMMERCIAL')) return 'commercial';
+    if (segmentText.includes('BOOK')) return 'book';
+
+    const categoryText = [
+      row.categoryName, row.CategoryName, row.category,
+      raw.CategoryName, raw.categoryName, raw.category,
+    ].map(clean).filter(Boolean).join(' ');
+
+    if (categoryText.includes('PACKAGING')) return 'packaging';
+    if (categoryText.includes('COMMERCIAL')) return 'commercial';
+    if (categoryText.includes('BOOK')) return 'book';
+    return '';
+  }
+
+  function rowMatchesArtworkScope(row, scope) {
+    if (!scope) return true;
+    const kind = getArtworkKind(row);
+    const raw = row?.__raw || {};
+    const isMongo =
+      row?.__SourceDB === 'MONGO_UNORDERED' || raw.__SourceDB === 'MONGO_UNORDERED';
+    // SQL worklist may omit Segment — keep those visible.
+    // Mongo unordered always has a Segment field; unclassified/commercial
+    // must not leak into tooling_pack.
+    if (!kind) return !isMongo;
+    if (scope === 'packaging') return kind === 'packaging';
+    if (scope === 'commercial_book') return kind === 'commercial' || kind === 'book';
+    return true;
+  }
+
+  const TOOLING_EDIT_FIELDS = new Set([
+    'toolingDie',
+    'toolingBlock',
+    'blanket',
+    'toolingPerson',
+    'toolingRemark',
+  ]);
+
+  function canEditMainGridField(field) {
+    if (!isToolingUser()) return true;
+    return TOOLING_EDIT_FIELDS.has(field);
   }
 
   // Admin-only check: used to gate editing of the Sales Person (Executive) field
   // for MongoDB-sourced (Unordered) jobs in the main pending grid.
   function isAdminUser() {
-    try {
-      const s = JSON.parse(localStorage.getItem('prepressFmsAuth') || 'null');
-      return !!(s && s.role === 'admin');
-    } catch (_) {
-      return false;
-    }
+    const s = getSession();
+    return !!(s && s.role === 'admin');
   }
 
   function formatUserWiseLinkCell(link) {
@@ -3754,7 +3939,9 @@ if (!entry) {
     if (!elements.userWiseResultsTableBody) return;
 
     const viewOnly = isUserWiseViewOnly();
-    const colCount = viewOnly ? 13 : 14;
+    const toolingOnly = isToolingUser();
+    const remarksReadOnly = viewOnly || toolingOnly;
+    const colCount = remarksReadOnly ? 17 : 18;
     const hasLoadedData = window.userWiseAllData && window.userWiseAllData.length > 0;
     const noRows = !data || data.length === 0;
 
@@ -3804,10 +3991,11 @@ if (!entry) {
       elements.userWiseSourceFilterSection.style.display = 'block';
     }
     
-    // Build table rows (checkbox + editable fields for admin/user; read-only for executive)
+    // Build table rows (checkbox + editable fields for admin/user; read-only for executive;
+    // tooling users can edit Die/Block/Blanket only)
     const rowsHtml = data.map((item, index) => {
       const rowId = `user-wise-row-${index}`;
-      const remarksCell = viewOnly
+      const remarksCell = remarksReadOnly
         ? `<td title="${(item.Remarks || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}">${(item.Remarks || '').replace(/"/g, '&quot;')}</td>`
         : `<td>
           <textarea
@@ -3819,7 +4007,7 @@ if (!entry) {
             style="width: 100%; padding: 0.25rem 0.5rem; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px; font-size: 0.7rem; min-height: 2.2rem; resize: vertical;"
           >${(item.Remarks || '').replace(/"/g, '&quot;')}</textarea>
         </td>`;
-      const linkCell = viewOnly
+      const linkCell = remarksReadOnly
         ? `<td>${formatUserWiseLinkCell(item.Link)}</td>`
         : `<td>
           <input 
@@ -3832,11 +4020,25 @@ if (!entry) {
             style="width: 100%; padding: 0.25rem 0.5rem; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px; font-size: 0.75rem;"
           >
         </td>`;
-      const selectCell = viewOnly
+      const selectCell = remarksReadOnly
         ? ''
         : `<td style="text-align: center;">
           <input type="checkbox" class="user-wise-row-checkbox" data-index="${index}" data-row-id="${rowId}">
         </td>`;
+      const toolingSelect = (field, processName) => {
+        const current = normalizeToolingStatus(item[field]);
+        if (viewOnly) return `<td>${current}</td>`;
+        return `<td>
+          <select
+            class="user-wise-tooling-select"
+            data-index="${index}"
+            data-field="${field}"
+            data-process="${processName}"
+            data-original-value="${current}"
+            style="width: 100%; padding: 0.2rem 0.3rem; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px; font-size: 0.72rem;"
+          >${toolingStatusOptionsHtml(current)}</select>
+        </td>`;
+      };
       return `<tr data-row-id="${rowId}">
         ${selectCell}
         <td>${(item.PONumber || '').replace(/"/g, '&quot;')}</td>
@@ -3849,6 +4051,10 @@ if (!entry) {
         <td>${(item.Division || '').replace(/"/g, '&quot;')}</td>
         <td>${formatDateDDMMMYYYY(item.FileReceivedDate)}</td>
         <td>${(item.Operation || '').replace(/"/g, '&quot;')}</td>
+        ${toolingSelect('ToolingDie', 'Tooling - Die')}
+        ${toolingSelect('ToolingBlock', 'Tooling - Block')}
+        ${toolingSelect('Blanket', 'Tooling - Blanket')}
+        <td class="user-wise-tooling-state">${formatToolingStateChip(item.ToolingState)}</td>
         ${remarksCell}
         ${linkCell}
         <td>${formatDateDDMMMYYYY(item.PlanDate)}</td>
@@ -3873,9 +4079,11 @@ if (!entry) {
       } : null
     });
     
-    // Setup checkbox event listeners (editable mode only)
+    // Setup checkbox event listeners (editable mode only). Tooling users
+    // get Die/Block/Blanket dropdowns but not Mark Done checkboxes.
     if (!viewOnly) {
-      setupUserWiseCheckboxes(data);
+      if (!toolingOnly) setupUserWiseCheckboxes(data);
+      setupUserWiseToolingSelects();
     }
     
     // Setup column filter inputs and Plan Date header sort
@@ -3966,11 +4174,61 @@ if (!entry) {
       });
     }
   }
+
+  function setupUserWiseToolingSelects() {
+    const selects = elements.userWiseResultsTableBody.querySelectorAll('.user-wise-tooling-select');
+    selects.forEach((select) => {
+      select.addEventListener('change', () => handleUserWiseToolingChange(select));
+    });
+  }
+
+  function sameArtworkJob(a, b) {
+    if (!a || !b) return false;
+    if ((a.__SourceDB || '') !== (b.__SourceDB || '')) return false;
+    if (a.__SourceDB === 'MONGO_UNORDERED') {
+      return !!(a.__MongoId && b.__MongoId && String(a.__MongoId) === String(b.__MongoId));
+    }
+    if (a.ID != null && b.ID != null && String(a.ID) === String(b.ID)) return true;
+    const jobA = String(a.Jobcardnumber || '').trim().toLowerCase();
+    const jobB = String(b.Jobcardnumber || '').trim().toLowerCase();
+    if (!jobA || !jobB || jobA !== jobB) return false;
+    const poA = String(a.PONumber || '').trim().toLowerCase();
+    const poB = String(b.PONumber || '').trim().toLowerCase();
+    if (poA || poB) return poA === poB;
+    return true;
+  }
+
+  function applyToolingToMatchingRows(rowData, nextFields) {
+    const match = (item) => sameArtworkJob(item, rowData);
+    [window.userWiseResultsData, window.userWiseAllData].forEach((list) => {
+      if (!Array.isArray(list)) return;
+      list.forEach((item) => {
+        if (!match(item)) return;
+        Object.assign(item, nextFields);
+      });
+    });
+    elements.userWiseResultsTableBody?.querySelectorAll('tr[data-row-id]').forEach((tr) => {
+      const idx = tr.querySelector('.user-wise-tooling-select')?.dataset.index;
+      const item = window.userWiseResultsData?.[idx];
+      if (!item || !match(item)) return;
+      tr.querySelectorAll('.user-wise-tooling-select').forEach((sel) => {
+        const field = sel.dataset.field;
+        if (nextFields[field] != null) {
+          sel.value = nextFields[field];
+          sel.dataset.originalValue = nextFields[field];
+        }
+      });
+      const stateCell = tr.querySelector('.user-wise-tooling-state');
+      if (stateCell && nextFields.ToolingState) {
+        stateCell.innerHTML = formatToolingStateChip(nextFields.ToolingState);
+      }
+    });
+  }
   
   // Update selected count and show/hide update button
   function updateSelectedCount() {
     const hasData = window.userWiseResultsData && window.userWiseResultsData.length > 0;
-    const viewOnly = isUserWiseViewOnly();
+    const viewOnly = isUserWiseViewOnly() || isToolingUser();
 
     if (viewOnly) {
       if (elements.userWiseResultsActions) {
@@ -4077,6 +4335,10 @@ if (!entry) {
       'Division',
       'File Received Date',
       'Operation',
+      'Die',
+      'Block',
+      'Blanket',
+      'Tooling',
       'Remarks',
       'Link',
       'Plan Date'
@@ -4120,6 +4382,10 @@ if (!entry) {
         item.Division || '',
         formatDateDDMMMYYYY(item.FileReceivedDate) || '',
         item.Operation || '',
+        normalizeToolingStatus(item.ToolingDie),
+        normalizeToolingStatus(item.ToolingBlock),
+        normalizeToolingStatus(item.Blanket),
+        item.ToolingState || computeToolingState(item.ToolingDie, item.ToolingBlock, item.Blanket),
         currentRemark,
         currentLink,
         formatDateDDMMMYYYY(item.PlanDate) || ''
@@ -4213,12 +4479,106 @@ if (!entry) {
       .join('\n');
   }
 
+  async function handleUserWiseToolingChange(select) {
+    if (!select || isUserWiseViewOnly()) return;
+
+    const index = parseInt(select.dataset.index, 10);
+    const field = select.dataset.field;
+    const processName = select.dataset.process;
+    const previousValue = select.dataset.originalValue || 'NA';
+    const nextValue = normalizeToolingStatus(select.value);
+    const rowData = window.userWiseResultsData?.[index];
+
+    if (!rowData || !field || !processName) {
+      select.value = previousValue;
+      return;
+    }
+
+    if (nextValue === normalizeToolingStatus(previousValue)) {
+      select.value = nextValue;
+      return;
+    }
+
+    const row = select.closest('tr');
+    const remark = row?.querySelector('.user-wise-remark-input')?.value?.trim() || null;
+    const link = row?.querySelector('.user-wise-link-input')?.value?.trim() || null;
+
+    const item = {
+      __SourceDB: rowData.__SourceDB,
+      Operation: processName,
+      ToolingStatus: nextValue,
+      Remark: remark,
+      Link: link,
+      username: window.userWiseCurrentUsername || null,
+    };
+
+    if (rowData.__SourceDB === 'KOL_SQL' || rowData.__SourceDB === 'AMD_SQL') {
+      item.ID = rowData.ID;
+      item.ledgerid = rowData.ledgerid;
+      if (!item.ID || !item.ledgerid) {
+        select.value = previousValue;
+        alert('This row is missing ID or ledgerid, so tooling cannot be updated.');
+        return;
+      }
+    } else if (rowData.__SourceDB === 'MONGO_UNORDERED') {
+      item.__MongoId = rowData.__MongoId || rowData.ID || null;
+      if (!item.__MongoId) {
+        select.value = previousValue;
+        alert('This row is missing a Mongo id, so tooling cannot be updated.');
+        return;
+      }
+    } else {
+      select.value = previousValue;
+      alert('Unsupported source for tooling update.');
+      return;
+    }
+
+    select.disabled = true;
+
+    try {
+      const apiBaseUrl =
+        isLocalFrontend()
+          ? 'http://localhost:3001/api/prepress'
+          : 'https://cdcapi.onrender.com/api/prepress';
+
+      const response = await fetch(`${apiBaseUrl}/pending/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: [item] }),
+      });
+
+      const result = await response.json();
+      const errorText = formatUserWiseUpdateErrors(result);
+      const firstError = Array.isArray(result?.errors) && result.errors.length
+        ? (result.errors[0].error || result.errors[0].message)
+        : '';
+
+      if (!response.ok || !result.ok || (Array.isArray(result.errors) && result.errors.length)) {
+        throw new Error(firstError || errorText || result.error || 'Update failed');
+      }
+
+      const nextFields = {
+        ToolingDie: field === 'ToolingDie' ? nextValue : normalizeToolingStatus(rowData.ToolingDie),
+        ToolingBlock: field === 'ToolingBlock' ? nextValue : normalizeToolingStatus(rowData.ToolingBlock),
+        Blanket: field === 'Blanket' ? nextValue : normalizeToolingStatus(rowData.Blanket),
+      };
+      nextFields.ToolingState = computeToolingState(nextFields.ToolingDie, nextFields.ToolingBlock, nextFields.Blanket);
+      nextFields.ToolingSummary = computeToolingSummary(nextFields.ToolingDie, nextFields.ToolingBlock, nextFields.Blanket);
+      applyToolingToMatchingRows(rowData, nextFields);
+      select.disabled = false;
+    } catch (error) {
+      select.value = previousValue;
+      select.disabled = false;
+      alert(error.message || 'Error updating tooling');
+    }
+  }
+
   async function refreshUserWisePendingAfterUpdate() {
     if (!window.userWiseCurrentUsername) return;
     const displayName = window.userWiseCurrentUsername;
     showLoading();
     const prepressApiBaseUrl =
-      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      isLocalFrontend()
         ? 'http://localhost:3001/api/prepress'
         : 'https://cdcapi.onrender.com/api/prepress';
     try {
@@ -4292,7 +4652,7 @@ if (!entry) {
 
     try {
       const apiBaseUrl =
-        window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        isLocalFrontend()
           ? 'http://localhost:3001/api/prepress'
           : 'https://cdcapi.onrender.com/api/prepress';
 
@@ -4394,7 +4754,7 @@ if (!entry) {
 
     try {
       const apiBaseUrl =
-        window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        isLocalFrontend()
           ? 'http://localhost:3001/api/prepress'
           : 'https://cdcapi.onrender.com/api/prepress';
 
@@ -4445,14 +4805,16 @@ if (!entry) {
       elements.userWiseResultsUsername.textContent = username;
     }
     let viewOnlyLabel = document.getElementById('user-wise-view-only-label');
-    if (isUserWiseViewOnly()) {
+    if (isUserWiseViewOnly() || isToolingUser()) {
       if (!viewOnlyLabel && elements.userWiseResultsTitle) {
         viewOnlyLabel = document.createElement('span');
         viewOnlyLabel.id = 'user-wise-view-only-label';
         viewOnlyLabel.style.cssText = 'font-size:0.75rem;font-weight:500;color:var(--text-muted);margin-left:0.5rem;';
         elements.userWiseResultsTitle.appendChild(viewOnlyLabel);
       }
-      if (viewOnlyLabel) viewOnlyLabel.textContent = '(View only)';
+      if (viewOnlyLabel) {
+        viewOnlyLabel.textContent = isToolingUser() ? '(Tooling only)' : '(View only)';
+      }
     } else if (viewOnlyLabel) {
       viewOnlyLabel.remove();
     }
@@ -4547,7 +4909,7 @@ if (!entry) {
       openUserWiseResultsModal(displayName, []);
       
       // Construct API URL - use prepress endpoint (different from artwork endpoint)
-      const prepressApiBaseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      const prepressApiBaseUrl = isLocalFrontend()
         ? 'http://localhost:3001/api/prepress'
         : 'https://cdcapi.onrender.com/api/prepress';
       
@@ -4734,7 +5096,7 @@ if (!entry) {
     if (noRows) {
       if (elements.userWiseCompletedResultsEmpty) elements.userWiseCompletedResultsEmpty.style.display = hasLoadedData ? 'none' : 'block';
       if (hasLoadedData) {
-        elements.userWiseCompletedResultsTableBody.innerHTML = '<tr><td colspan="15" style="text-align:center;padding:2rem;color:var(--text-muted);font-size:0.9rem;">No rows match your filters. Clear column filters or change source filters to see data.</td></tr>';
+        elements.userWiseCompletedResultsTableBody.innerHTML = '<tr><td colspan="17" style="text-align:center;padding:2rem;color:var(--text-muted);font-size:0.9rem;">No rows match your filters. Clear column filters or change source filters to see data.</td></tr>';
         if (elements.userWiseCompletedResultsTableContainer) elements.userWiseCompletedResultsTableContainer.style.display = 'block';
       } else {
         elements.userWiseCompletedResultsTableBody.innerHTML = '';
@@ -4765,6 +5127,8 @@ if (!entry) {
       <td>${formatDateDDMMMYYYY(item.FileReceivedDate)}</td>
       <td>${(item.Operation || '').replace(/"/g, '&quot;')}</td>
       <td>${formatStatusChip(item.Status)}</td>
+      <td class="user-wise-tooling-state">${formatToolingStateChip(item.ToolingState)}</td>
+      <td>${(item.ToolingSummary || '').replace(/"/g, '&quot;')}</td>
       <td title="${(item.Remarks || '').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}">${(item.Remarks || '').replace(/"/g, '&quot;')}</td>
       <td>${(item.Link || '').replace(/"/g, '&quot;')}</td>
       <td>${formatDateDDMMMYYYY(item.PlanDate)}</td>
@@ -4820,6 +5184,7 @@ if (!entry) {
           if (sourceFilter === 'UNORDERED' && sourceDb === 'MONGO_UNORDERED') matchesSource = true;
         }
         if (!matchesSource) return false;
+        if (!rowMatchesArtworkScope(item, getArtworkScope())) return false;
         for (const [column, filterValue] of Object.entries(columnFilters)) {
           if (!(item[column] || '').toString().toLowerCase().includes(filterValue.toLowerCase())) return false;
         }
@@ -4883,7 +5248,7 @@ if (!entry) {
       return;
     }
 
-    const headers = ['PO Number', 'PO Date', 'Jobcard Number', 'Executive', 'Client Name', 'Ref MIS Code', 'Job Name', 'Division', 'File Received Date', 'Operation', 'Status', 'Remarks', 'Link', 'Plan Date', 'Actual Date'];
+    const headers = ['PO Number', 'PO Date', 'Jobcard Number', 'Executive', 'Client Name', 'Ref MIS Code', 'Job Name', 'Division', 'File Received Date', 'Operation', 'Status', 'Tooling', 'Tooling Summary', 'Remarks', 'Link', 'Plan Date', 'Actual Date'];
     const escapeCSV = (value) => {
       if (value === null || value === undefined) return '';
       const str = String(value);
@@ -4907,6 +5272,8 @@ if (!entry) {
         formatDateDDMMMYYYY(item.FileReceivedDate) || '',
         item.Operation || '',
         item.Status || '',
+        item.ToolingState || '',
+        item.ToolingSummary || '',
         item.Remarks || '',
         item.Link || '',
         formatDateDDMMMYYYY(item.PlanDate) || '',
@@ -4950,7 +5317,7 @@ if (!entry) {
       closeUserWiseCompletedModal();
       showLoading();
       openUserWiseCompletedResultsModal(displayName);
-      const prepressApiBaseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      const prepressApiBaseUrl = isLocalFrontend()
         ? 'http://localhost:3001/api/prepress'
         : 'https://cdcapi.onrender.com/api/prepress';
       const apiUrl = `${prepressApiBaseUrl}/completed?username=${encodeURIComponent(displayName)}&fromDate=${encodeURIComponent(fromDate)}&toDate=${encodeURIComponent(toDate)}`;
@@ -5137,7 +5504,10 @@ if (!entry) {
       const newInput = input.cloneNode(true);
       input.parentNode.replaceChild(newInput, input);
       
-      newInput.addEventListener('input', (e) => {
+      newInput.addEventListener('input', () => {
+        debouncedApplyFilters();
+      });
+      newInput.addEventListener('change', () => {
         debouncedApplyFilters();
       });
     });
@@ -5276,7 +5646,7 @@ if (!entry) {
   // Auth API uses /artwork prefix (same as API_BASE_URL)
   // Note: API_BASE_URL is declared at top of IIFE
   function getAuthApiBase() {
-    return window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    return isLocalFrontend()
       ? 'http://localhost:3001/api/artwork'
       : 'https://cdcapi.onrender.com/api/artwork';
   }
@@ -5417,7 +5787,9 @@ if (!entry) {
         role: result.role,
         userKey: result.userKey,
         displayName: result.displayName,
-        sites: result.sites || []
+        sites: result.sites || [],
+        artworkScope: result.artworkScope || null,
+        isStatic: !!result.isStatic,
       };
       if (result.role === 'admin') {
         // Keep the admin password in memory so the Set Passwords page can call the admin-only endpoint
@@ -5442,7 +5814,7 @@ if (!entry) {
     if (loginScreen) loginScreen.style.display = 'flex';
     // Hide app chrome while logged out
     document.body.classList.add('logged-out');
-    document.body.classList.remove('role-admin', 'role-user');
+    document.body.classList.remove('role-admin', 'role-user', 'role-executive', 'role-tooling');
     // Reset password field
     const pw = document.getElementById('login-password');
     if (pw) pw.value = '';
@@ -5457,12 +5829,14 @@ if (!entry) {
   }
 
   function applyRoleChrome(session) {
-    document.body.classList.remove('role-admin', 'role-user', 'role-executive');
+    document.body.classList.remove('role-admin', 'role-user', 'role-executive', 'role-tooling');
     const roleClass = session.role === 'admin'
       ? 'role-admin'
       : session.role === 'executive'
         ? 'role-executive'
-        : 'role-user';
+        : session.role === 'tooling'
+          ? 'role-tooling'
+          : 'role-user';
     document.body.classList.add(roleClass);
 
     const userLabel = document.getElementById('auth-current-user');
@@ -5507,7 +5881,7 @@ if (!entry) {
       if (typeof showLoading === 'function') showLoading();
       openUserWiseResultsModal(displayName, []);
 
-      const prepressApiBaseUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      const prepressApiBaseUrl = isLocalFrontend()
         ? 'http://localhost:3001/api/prepress'
         : 'https://cdcapi.onrender.com/api/prepress';
 
@@ -5559,7 +5933,7 @@ if (!entry) {
       // DB user: skip admin grid; auto-open their own pending.
       await autoOpenUserOwnPending(session);
     }
-    // role === 'admin' or 'executive': land on the main pending grid (loaded by init()).
+    // role === 'admin', 'executive', or 'tooling': land on the main pending grid (loaded by init()).
   }
 
   // ============================================================
@@ -5621,7 +5995,7 @@ if (!entry) {
       tr.dataset.userKey = user.userKey || user._id || '';
       tr.dataset.displayName = (user.displayName || '').toLowerCase();
       const subtitle = user.isStatic
-        ? 'Executive (static)'
+        ? (user.role === 'tooling' ? 'Tooling (static)' : 'Executive (static)')
         : ((user.sites || []).join(', ') || '—');
       const staticBadge = user.isStatic
         ? '<span class="static-badge" title="Static account">STATIC</span>'

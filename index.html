@@ -827,6 +827,10 @@
                     <th>Division</th>
                     <th>File Received Date</th>
                     <th>Operation</th>
+                    <th>Die</th>
+                    <th>Block</th>
+                    <th>Blanket</th>
+                    <th>Tooling</th>
                     <th>Remarks</th>
                     <th>Link</th>
                     <th class="sortable-header" data-sort-column="PlanDate" style="cursor: pointer; user-select: none;">
@@ -859,6 +863,44 @@
                     <th></th>
                     <th>
                       <input type="text" class="user-wise-filter-input filter-input" data-column="Operation" placeholder="Search" style="width: 100%; padding: 0.25rem 0.4rem; font-size: 0.7rem; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px;" />
+                    </th>
+                    <th>
+                      <select class="user-wise-filter-input filter-select" data-column="ToolingDie" style="width: 100%; padding: 0.25rem 0.4rem; font-size: 0.7rem; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px;">
+                        <option value="">All</option>
+                        <option value="Required">Required</option>
+                        <option value="Ordered">Ordered</option>
+                        <option value="Received">Received</option>
+                        <option value="Old">Old</option>
+                        <option value="NA">NA</option>
+                      </select>
+                    </th>
+                    <th>
+                      <select class="user-wise-filter-input filter-select" data-column="ToolingBlock" style="width: 100%; padding: 0.25rem 0.4rem; font-size: 0.7rem; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px;">
+                        <option value="">All</option>
+                        <option value="Required">Required</option>
+                        <option value="Ordered">Ordered</option>
+                        <option value="Received">Received</option>
+                        <option value="Old">Old</option>
+                        <option value="NA">NA</option>
+                      </select>
+                    </th>
+                    <th>
+                      <select class="user-wise-filter-input filter-select" data-column="Blanket" style="width: 100%; padding: 0.25rem 0.4rem; font-size: 0.7rem; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px;">
+                        <option value="">All</option>
+                        <option value="Required">Required</option>
+                        <option value="Ordered">Ordered</option>
+                        <option value="Received">Received</option>
+                        <option value="Old">Old</option>
+                        <option value="NA">NA</option>
+                      </select>
+                    </th>
+                    <th>
+                      <select class="user-wise-filter-input filter-select" data-column="ToolingState" style="width: 100%; padding: 0.25rem 0.4rem; font-size: 0.7rem; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px;">
+                        <option value="">All</option>
+                        <option value="Open">Open</option>
+                        <option value="Closed">Closed</option>
+                        <option value="Not Applicable">Not Applicable</option>
+                      </select>
                     </th>
                     <th></th>
                     <th></th>
@@ -1006,6 +1048,8 @@
                   <th>PO Number</th><th>PO Date</th><th>Jobcard Number</th><th>Executive</th><th>Client Name</th>
                   <th>Ref MIS Code</th><th>Job Name</th><th>Division</th><th>File Received Date</th><th>Operation</th>
                   <th>Status</th>
+                  <th>Tooling</th>
+                  <th>Tooling Summary</th>
                   <th>Remarks</th><th>Link</th>
                   <th class="sortable-header" data-sort-column="PlanDate" style="cursor: pointer; user-select: none;">Plan Date <span class="sort-indicator" style="margin-left: 0.25rem; font-size: 0.7rem; opacity: 0.5;">↕</span></th>
                   <th>Actual Date</th>
@@ -1030,6 +1074,15 @@
                       <option value="Cancelled">Cancelled</option>
                     </select>
                   </th>
+                  <th>
+                    <select class="user-wise-completed-filter-input filter-select" data-column="ToolingState" style="width: 100%; padding: 0.25rem 0.4rem; font-size: 0.7rem; background: var(--bg-primary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px;">
+                      <option value="">All</option>
+                      <option value="Open">Open</option>
+                      <option value="Closed">Closed</option>
+                      <option value="Not Applicable">Not Applicable</option>
+                    </select>
+                  </th>
+                  <th></th>
                   <th></th><th></th><th></th><th></th>
                 </tr>
               </thead>

@@ -1372,6 +1372,28 @@ body.role-executive #user-wise-results-actions > div {
   justify-content: flex-end !important;
 }
 
+/* Role: tooling — same chrome as executive, tooling columns only. */
+body.role-tooling .admin-only,
+body.role-tooling #btn-add-entry {
+  display: none !important;
+}
+body.role-tooling #user-wise-results-modal .user-wise-select-col,
+body.role-tooling #user-wise-selected-count,
+body.role-tooling #user-wise-unselect-all-btn,
+body.role-tooling #user-wise-update-split,
+body.role-tooling #user-wise-update-btn,
+body.role-tooling #user-wise-not-required-btn {
+  display: none !important;
+}
+body.role-tooling #user-wise-results-actions > div {
+  justify-content: flex-end !important;
+}
+body.role-tooling .cell-select.editable:not([data-field="toolingDie"]):not([data-field="toolingBlock"]):not([data-field="blanket"]):not([data-field="toolingPerson"]):not([data-field="toolingRemark"]),
+body.role-tooling .cell-input.editable:not([data-field="toolingRemark"]) {
+  pointer-events: none;
+  opacity: 0.75;
+}
+
 /* Role: user — make sure the user-wise results modal close button & overlay
    can't drop them back into the (hidden) admin grid. Hiding the close button
    forces them to use Logout to leave the screen. */
