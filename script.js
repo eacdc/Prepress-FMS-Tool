@@ -1413,6 +1413,11 @@
         return false;
       }
 
+      // tooling_pack / tooling_comm: only jobs with Die, Block, or Blanket = Required
+      if (isToolingUser() && !isToolingOpen(entry.toolingDie, entry.toolingBlock, entry.blanket)) {
+        return false;
+      }
+
       // Apply quick preset filters (on top of source filter)
       if (state.quickFilterPreset) {
         const preset = state.quickFilterPreset;
@@ -3743,6 +3748,10 @@ if (!entry) {
         }
 
         if (!rowMatchesArtworkScope(item, getArtworkScope())) {
+          return false;
+        }
+
+        if (isToolingUser() && !isToolingOpen(item.ToolingDie, item.ToolingBlock, item.Blanket)) {
           return false;
         }
         
