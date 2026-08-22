@@ -2180,7 +2180,20 @@
             </option>
           </select>
         </td>
-        <td>${(entry.toolingRemark || '').replace(/"/g, '&quot;')}</td>
+        <td>
+          ${
+            canEditToolingRemarkField()
+              ? `<input
+                  type="text"
+                  class="${getEditableClass('cell-input', entryId, 'toolingRemark')}"
+                  data-field="toolingRemark"
+                  data-col-index="33"
+                  value="${(entry.toolingRemark || '').replace(/"/g, '&quot;')}"
+                  placeholder="Click to edit"
+                />`
+              : `${(entry.toolingRemark || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}`
+          }
+        </td>
         <td>
           <select
             class="cell-select editable"
@@ -3918,7 +3931,12 @@ if (!entry) {
     'toolingRemark',
   ]);
 
+  function canEditToolingRemarkField() {
+    return isAdminUser() || isToolingUser();
+  }
+
   function canEditMainGridField(field) {
+    if (field === 'toolingRemark') return canEditToolingRemarkField();
     if (!isToolingUser()) return true;
     return TOOLING_EDIT_FIELDS.has(field);
   }
