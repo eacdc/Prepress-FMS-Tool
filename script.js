@@ -4232,6 +4232,37 @@ if (!entry) {
         stateCell.innerHTML = formatToolingStateChip(nextFields.ToolingState);
       }
     });
+    updateSelectedCount();
+  }
+
+  function isCommercialOrBookJob(row) {
+    const kind = getArtworkKind(row);
+    return kind === 'commercial' || kind === 'book';
+  }
+
+  function liveToolingValues(item, tr) {
+    const read = (field, fallback) => {
+      const sel = tr?.querySelector(`.user-wise-tooling-select[data-field="${field}"]`);
+      return sel ? sel.value : fallback;
+    };
+    return {
+      die: read('ToolingDie', item?.ToolingDie),
+      block: read('ToolingBlock', item?.ToolingBlock),
+      blanket: read('Blanket', item?.Blanket),
+    };
+  }
+
+  function selectedRowsBlockMarkDone() {
+    const checkboxes = elements.userWiseResultsTableBody?.querySelectorAll('.user-wise-row-checkbox:checked');
+    if (!checkboxes || !checkboxes.length) return false;
+    for (const cb of checkboxes) {
+      const index = parseInt(cb.dataset.index, 10);
+      const item = window.userWiseResultsData?.[index];
+      if (!item || !isCommercialOrBookJob(item)) continue;
+      const { die, block, blanket } = liveToolingValues(item, cb.closest('tr'));
+      if (isToolingOpen(die, block, blanket)) return true;
+    }
+    return false;
   }
   
   // Update selected count and show/hide update button
@@ -4268,6 +4299,15 @@ if (!entry) {
       elements.userWiseUpdateSplit.style.display = count > 0 ? 'flex' : 'none';
     } else if (elements.userWiseUpdateBtn) {
       elements.userWiseUpdateBtn.style.display = count > 0 ? 'flex' : 'none';
+    }
+
+    // Commercial / Book: Mark Done stays off while any tooling type is still Required
+    const markDoneBlocked = count > 0 && selectedRowsBlockMarkDone();
+    if (elements.userWiseUpdateBtn) {
+      elements.userWiseUpdateBtn.disabled = markDoneBlocked;
+      elements.userWiseUpdateBtn.title = markDoneBlocked
+        ? 'Change Required tooling (Die / Block / Blanket) before marking done'
+        : 'Mark selected step(s) done';
     }
 
     // Not Required only applies to Plate Output rows — enable when at least one is selected
@@ -4648,6 +4688,10 @@ if (!entry) {
     const selectedRows = getSelectedUserWiseRows();
     if (selectedRows.length === 0) {
       alert('Please select at least one item to update.');
+      return;
+    }
+    if (selectedRowsBlockMarkDone()) {
+      alert('Commercial / Book jobs cannot be marked done while any tooling (Die, Block, or Blanket) is still Required.');
       return;
     }
 
