@@ -3864,8 +3864,6 @@ if (!entry) {
   function getArtworkKind(row) {
     if (!row) return '';
     const raw = row.__raw || {};
-    const isMongo =
-      row.__SourceDB === 'MONGO_UNORDERED' || raw.__SourceDB === 'MONGO_UNORDERED';
     const siteLike = /^(COMMON|KOLKATA|AHMEDABAD)$/i;
     const clean = (v) => {
       const s = String(v || '').trim();
@@ -3874,13 +3872,12 @@ if (!entry) {
     };
 
     // Segment is the source of truth (Commercial vs Packaging).
+    // User-wise SQL also stores that value in Division (not Kolkata/Ahmedabad).
     // Do not use category substring "PACK" — Compact/Impact/Packet false-match as packaging.
     const segmentText = [
       row.segmentName, row.SegmentName, row.segment,
       raw.SegmentName, raw.segmentName, raw.segment,
-      isMongo ? row.Division : '',
-      isMongo ? raw.Division : '',
-      isMongo ? row.division : '',
+      row.Division, raw.Division, row.division,
     ].map(clean).filter(Boolean).join(' ');
 
     if (segmentText.includes('PACKAGING')) return 'packaging';
@@ -4237,7 +4234,10 @@ if (!entry) {
 
   function isCommercialOrBookJob(row) {
     const kind = getArtworkKind(row);
-    return kind === 'commercial' || kind === 'book';
+    if (kind === 'commercial' || kind === 'book') return true;
+    if (kind === 'packaging') return false;
+    const div = String(row?.Division || row?.division || '').trim().toUpperCase();
+    return div.includes('COMMERCIAL') || div.includes('BOOK');
   }
 
   function liveToolingValues(item, tr) {
