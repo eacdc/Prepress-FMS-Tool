@@ -1828,6 +1828,239 @@
     input.dataset.datalistReady = '1';
   }
 
+  const MAIN_TABLE_ID = 'prepress-table';
+  const MAIN_TABLE_FROZEN_COUNT = 6;
+  const MAIN_COL_WIDTH_KEY = 'prepressFmsMainColWidthOverrides';
+  const MAIN_ROW_HEIGHT_KEY = 'prepressFmsMainRowHeights';
+
+  function getMainTable() {
+    return document.getElementById(MAIN_TABLE_ID);
+  }
+
+  function loadMainColWidthOverrides() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(MAIN_COL_WIDTH_KEY) || '{}');
+      if (!raw || Array.isArray(raw) || typeof raw !== 'object') return {};
+      return raw;
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function saveMainColWidthOverride(index, width) {
+    const overrides = loadMainColWidthOverrides();
+    overrides[String(index)] = width;
+    try { localStorage.setItem(MAIN_COL_WIDTH_KEY, JSON.stringify(overrides)); } catch (_) { /* ignore */ }
+  }
+
+  function loadMainRowHeights() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(MAIN_ROW_HEIGHT_KEY) || '{}');
+      return raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function saveMainRowHeights(map) {
+    try { localStorage.setItem(MAIN_ROW_HEIGHT_KEY, JSON.stringify(map)); } catch (_) { /* ignore */ }
+  }
+
+  function measureMainTableText(text, style, extraLetterSpacing) {
+    const canvas = measureMainTableText._canvas || (measureMainTableText._canvas = document.createElement('canvas'));
+    const ctx = canvas.getContext('2d');
+    const font = `${style.fontWeight || '400'} ${style.fontSize || '12px'} ${style.fontFamily || 'sans-serif'}`;
+    ctx.font = font;
+    const str = String(text || '');
+    let width = ctx.measureText(str).width;
+    const spacing = extraLetterSpacing ?? parseFloat(style.letterSpacing);
+    if (str && !Number.isNaN(spacing) && spacing) {
+      width += spacing * Math.max(0, str.length - 1);
+    }
+    return width;
+  }
+
+  function getMainHeaderLabel(th) {
+    const clone = th.cloneNode(true);
+    clone.querySelectorAll('.col-resize-handle, input, select, textarea').forEach((n) => n.remove());
+    return (clone.textContent || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function getMainCellMeasureText(cell) {
+    const control = cell.querySelector('input, select, textarea');
+    if (control) {
+      if (control.tagName === 'SELECT') {
+        const opt = control.options[control.selectedIndex];
+        return ((opt && opt.text) || control.value || '').trim();
+      }
+      return (control.value || '').trim();
+    }
+    const clone = cell.cloneNode(true);
+    clone.querySelectorAll('.row-resize-handle').forEach((n) => n.remove());
+    return (clone.textContent || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function computeMainAutoColWidths(table) {
+    const headerCells = table.querySelectorAll('.table-header-row th');
+    const colCount = headerCells.length;
+    const overrides = loadMainColWidthOverrides();
+    const headerStyle = headerCells[0] ? getComputedStyle(headerCells[0]) : null;
+    const sampleTd = table.querySelector('tbody td');
+    const bodyStyle = sampleTd ? getComputedStyle(sampleTd) : headerStyle;
+    const widths = [];
+
+    for (let i = 0; i < colCount; i++) {
+      const override = Number(overrides[String(i)]);
+      if (override) {
+        widths[i] = override;
+        continue;
+      }
+
+      const headerLabel = getMainHeaderLabel(headerCells[i]).toUpperCase();
+      let maxW = headerStyle ? measureMainTableText(headerLabel, headerStyle) : headerLabel.length * 7;
+
+      table.querySelectorAll(`tbody tr td:nth-child(${i + 1})`).forEach((td) => {
+        const text = getMainCellMeasureText(td);
+        if (!text || !bodyStyle) return;
+        const hasSelect = !!td.querySelector('select');
+        const w = measureMainTableText(text, bodyStyle) + (hasSelect ? 18 : 0);
+        if (w > maxW) maxW = w;
+      });
+
+      const filterTh = table.querySelector(`.filter-row th:nth-child(${i + 1})`);
+      const dateFilter = filterTh?.querySelector('.filter-date');
+      const minW = dateFilter ? 118 : 72;
+      widths[i] = Math.max(minW, Math.min(520, Math.ceil(maxW + 28)));
+    }
+    return widths;
+  }
+
+  function applyMainColWidths(table, widths) {
+    let colgroup = table.querySelector('colgroup');
+    if (!colgroup) {
+      colgroup = document.createElement('colgroup');
+      table.insertBefore(colgroup, table.firstChild);
+    }
+    colgroup.innerHTML = '';
+    let total = 0;
+    widths.forEach((w) => {
+      const col = document.createElement('col');
+      col.style.width = `${w}px`;
+      colgroup.appendChild(col);
+      total += w;
+    });
+    table.style.width = `${total}px`;
+    table.style.minWidth = `${total}px`;
+  }
+
+  function ensureMainColGroup(table) {
+    const headerCells = table.querySelectorAll('.table-header-row th');
+    if (!headerCells.length) return;
+    applyMainColWidths(table, computeMainAutoColWidths(table));
+  }
+
+  function updateFrozenOffsets(table) {
+    const headerRow = table.querySelector('.table-header-row');
+    const headerCells = table.querySelectorAll('.table-header-row th');
+    const headerH = headerRow ? Math.ceil(headerRow.getBoundingClientRect().height) : 32;
+    table.style.setProperty('--main-header-row-height', `${headerH}px`);
+    let left = 0;
+    for (let i = 0; i < MAIN_TABLE_FROZEN_COUNT && i < headerCells.length; i++) {
+      const w = headerCells[i].getBoundingClientRect().width;
+      table.querySelectorAll(`th:nth-child(${i + 1}), td:nth-child(${i + 1})`).forEach((cell) => {
+        cell.style.left = `${Math.round(left)}px`;
+      });
+      left += w;
+    }
+  }
+
+  function applyMainRowHeights() {
+    const heights = loadMainRowHeights();
+    elements.tableBody?.querySelectorAll('tr.data-row[data-id]').forEach((tr) => {
+      const h = heights[tr.getAttribute('data-id')];
+      if (h) {
+        tr.style.height = `${h}px`;
+        tr.classList.add('row-height-resized');
+      }
+    });
+  }
+
+  function ensureMainColResizeHandles(table) {
+    table.querySelectorAll('.table-header-row th').forEach((th, index) => {
+      if (th.querySelector('.col-resize-handle')) return;
+      const handle = document.createElement('span');
+      handle.className = 'col-resize-handle';
+      handle.title = 'Drag to resize column';
+      handle.addEventListener('mousedown', (e) => startMainColResize(e, index));
+      th.appendChild(handle);
+    });
+  }
+
+  function startMainColResize(e, index) {
+    e.preventDefault();
+    e.stopPropagation();
+    const table = getMainTable();
+    const col = table?.querySelector(`colgroup col:nth-child(${index + 1})`);
+    if (!col) return;
+    const startX = e.clientX;
+    const startW = parseInt(col.style.width, 10) || 110;
+    document.body.classList.add('is-col-resizing');
+    const onMove = (ev) => {
+      const next = Math.max(60, startW + (ev.clientX - startX));
+      col.style.width = `${next}px`;
+      const total = Array.from(table.querySelectorAll('colgroup col'))
+        .reduce((sum, c) => sum + (parseInt(c.style.width, 10) || 110), 0);
+      table.style.width = `${total}px`;
+      table.style.minWidth = `${total}px`;
+      if (index < MAIN_TABLE_FROZEN_COUNT) updateFrozenOffsets(table);
+    };
+    const onUp = () => {
+      document.body.classList.remove('is-col-resizing');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      const widths = Array.from(table.querySelectorAll('colgroup col'))
+        .map((c) => parseInt(c.style.width, 10) || 110);
+      saveMainColWidthOverride(index, widths[index]);
+      updateFrozenOffsets(table);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
+  function startMainRowResize(e, tr) {
+    e.preventDefault();
+    e.stopPropagation();
+    const startY = e.clientY;
+    const startH = tr.getBoundingClientRect().height;
+    document.body.classList.add('is-row-resizing');
+    const onMove = (ev) => {
+      const next = Math.max(24, Math.min(400, startH + (ev.clientY - startY)));
+      tr.style.height = `${next}px`;
+      tr.classList.add('row-height-resized');
+    };
+    const onUp = () => {
+      document.body.classList.remove('is-row-resizing');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      const id = tr.getAttribute('data-id');
+      if (!id) return;
+      const heights = loadMainRowHeights();
+      heights[id] = Math.round(tr.getBoundingClientRect().height);
+      saveMainRowHeights(heights);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
+  function applyMainTableLayout() {
+    const table = getMainTable();
+    if (!table) return;
+    ensureMainColGroup(table);
+    ensureMainColResizeHandles(table);
+    applyMainRowHeights();
+    updateFrozenOffsets(table);
+  }
+
   // Render table
   function renderTable() {
     if (!elements.tableBody) return;
@@ -1870,6 +2103,7 @@
       if (elements.paginationContainer) {
         elements.paginationContainer.style.display = 'none';
       }
+      applyMainTableLayout();
       return;
     }
 
@@ -1935,12 +2169,12 @@
       const platePersonDisabledClass = plateNotRequired ? ' plate-field-disabled' : '';
       
       return `<tr class="data-row${modifiedClass}${approvalYesPlatePendingClass}" data-id="${entryId}">
-        <td>${soDateFmt}</td>
-        <td>${poDateFmt}</td>
-        <td>${entry.soNo || ''}</td>
-        <td>${entry.pwoNo || ''}</td>
-        <td>${pwoDateFmt}</td>
-        <td>${entry.jobName || ''}</td>
+        <td class="frozen-col">${soDateFmt}</td>
+        <td class="frozen-col">${poDateFmt}</td>
+        <td class="frozen-col">${entry.soNo || ''}</td>
+        <td class="frozen-col">${entry.pwoNo || ''}</td>
+        <td class="frozen-col">${pwoDateFmt}</td>
+        <td class="frozen-col frozen-col-last">${(entry.jobName || '').replace(/"/g, '&quot;')}<span class="row-resize-handle" title="Drag to resize row"></span></td>
         <td>
           ${
             isMongoUnordered && isAdminUser()
@@ -2245,6 +2479,7 @@
 
     elements.tableBody.innerHTML = rowsHtml;
     updateTagBarVisibility();
+    applyMainTableLayout();
   }
 
   /** Resolve grid row to entry by tr data-id (same logic as handleCellEdit). */
@@ -2817,6 +3052,21 @@
     fetchUsers().then(() => {
     fetchEntries();
     });
+
+    applyMainTableLayout();
+    window.addEventListener('resize', () => {
+      const table = getMainTable();
+      if (table) updateFrozenOffsets(table);
+    });
+
+    if (elements.tableBody) {
+      elements.tableBody.addEventListener('mousedown', (e) => {
+        const handle = e.target.closest('.row-resize-handle');
+        if (!handle) return;
+        const tr = handle.closest('tr.data-row');
+        if (tr) startMainRowResize(e, tr);
+      });
+    }
 
     // Inline edit handlers (frontend only for now)
     if (elements.tableBody) {

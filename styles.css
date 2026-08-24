@@ -308,6 +308,171 @@ h1 {
   color: var(--text-primary);
 }
 
+/* Main pending/completed grid: freeze through Job Name + resizable cols/rows */
+#prepress-table {
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  --main-header-row-height: 32px;
+}
+
+#prepress-table th,
+#prepress-table td {
+  min-width: 0;
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+#prepress-table .table-header-row th {
+  border-right: 1px solid rgba(255, 255, 255, 0.25);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+#prepress-table .filter-row th {
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 1px solid var(--border-color);
+}
+
+#prepress-table tbody td {
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+#prepress-table thead {
+  position: static;
+}
+
+#prepress-table thead th {
+  position: sticky;
+  z-index: 10;
+}
+
+#prepress-table .table-header-row th {
+  top: 0;
+  z-index: 11;
+  overflow: visible;
+}
+
+#prepress-table .filter-row th {
+  top: var(--main-header-row-height);
+  z-index: 10;
+}
+
+#prepress-table th.frozen-col,
+#prepress-table td.frozen-col {
+  position: sticky;
+}
+
+#prepress-table .table-header-row th.frozen-col {
+  z-index: 14;
+  background: var(--teal-header);
+}
+
+#prepress-table .filter-row th.frozen-col {
+  z-index: 13;
+  background: var(--teal-header-dark);
+}
+
+#prepress-table tbody td.frozen-col {
+  z-index: 2;
+  background: var(--bg-secondary);
+  box-shadow: inset 0 -1px 0 var(--border-color);
+}
+
+#prepress-table tbody tr.data-row:hover td.frozen-col {
+  background: var(--bg-primary);
+}
+
+#prepress-table tbody tr.data-row.modified td.frozen-col {
+  background-color: rgba(30, 41, 59, 1);
+  box-shadow: inset 0 0 0 100px rgba(251, 191, 36, 0.15), inset 0 -1px 0 var(--border-color);
+}
+
+#prepress-table tbody tr.data-row.modified:hover td.frozen-col {
+  box-shadow: inset 0 0 0 100px rgba(251, 191, 36, 0.25), inset 0 -1px 0 var(--border-color);
+}
+
+#prepress-table tbody tr.data-row.row-approval-yes-plate-pending td.frozen-col {
+  background-color: #7f1d1d;
+  box-shadow: inset 0 0 0 100px rgba(239, 68, 68, 0.35), inset 0 -1px 0 var(--border-color);
+}
+
+#prepress-table tbody tr.data-row.row-approval-yes-plate-pending:hover td.frozen-col {
+  box-shadow: inset 0 0 0 100px rgba(239, 68, 68, 0.5), inset 0 -1px 0 var(--border-color);
+}
+
+#prepress-table tbody td.frozen-col-last {
+  overflow: visible;
+}
+
+#prepress-table th.frozen-col-last,
+#prepress-table td.frozen-col-last {
+  box-shadow: 6px 0 8px -4px rgba(0, 0, 0, 0.45);
+}
+
+#prepress-table tbody td.frozen-col-last {
+  box-shadow: inset 0 -1px 0 var(--border-color), 6px 0 8px -4px rgba(0, 0, 0, 0.45);
+}
+
+#prepress-table tbody tr.data-row.modified td.frozen-col-last {
+  box-shadow: inset 0 0 0 100px rgba(251, 191, 36, 0.15), inset 0 -1px 0 var(--border-color), 6px 0 8px -4px rgba(0, 0, 0, 0.45);
+}
+
+#prepress-table tbody tr.data-row.row-approval-yes-plate-pending td.frozen-col-last {
+  box-shadow: inset 0 0 0 100px rgba(239, 68, 68, 0.35), inset 0 -1px 0 var(--border-color), 6px 0 8px -4px rgba(0, 0, 0, 0.45);
+}
+
+#prepress-table tbody tr.data-row {
+  position: relative;
+}
+
+#prepress-table tbody tr.row-height-resized td {
+  white-space: normal;
+  overflow: hidden;
+  vertical-align: top;
+  height: inherit;
+}
+
+#prepress-table .col-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 20;
+}
+
+#prepress-table .col-resize-handle:hover,
+body.is-col-resizing #prepress-table .col-resize-handle {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+#prepress-table .row-resize-handle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 8px;
+  cursor: row-resize;
+  z-index: 6;
+}
+
+#prepress-table .row-resize-handle:hover,
+body.is-row-resizing #prepress-table .row-resize-handle {
+  background: rgba(34, 197, 94, 0.45);
+}
+
+body.is-col-resizing,
+body.is-row-resizing {
+  user-select: none;
+  cursor: col-resize;
+}
+
+body.is-row-resizing {
+  cursor: row-resize;
+}
+
 .prepress-table thead {
   position: sticky;
   top: 0;
