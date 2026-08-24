@@ -81,6 +81,7 @@
 
   const TOOLING_OPEN = 'REQUIRED';
   const TOOLING_VALUES = ['NA', 'Old', 'Ordered', 'Required', 'Received'];
+  const USER_WISE_TOOLING_ALLOWED = ['Required', 'Ordered', 'Received'];
 
   function normalizeToolingStatus(value) {
     const t = (value ?? '').toString().trim();
@@ -122,6 +123,30 @@
     return TOOLING_VALUES.map(
       (v) => `<option value="${v}" ${n === v ? 'selected' : ''}>${v}</option>`
     ).join('');
+  }
+
+  function dbToolingFieldKey(field) {
+    if (field === 'ToolingDie') return '__dbToolingDie';
+    if (field === 'ToolingBlock') return '__dbToolingBlock';
+    if (field === 'Blanket') return '__dbBlanket';
+    return null;
+  }
+
+  function dbToolingValue(item, field) {
+    const key = dbToolingFieldKey(field);
+    if (key && item && item[key] != null && item[key] !== '') {
+      return normalizeToolingStatus(item[key]);
+    }
+    return normalizeToolingStatus(item?.[field]);
+  }
+
+  function stampDbTooling(rows) {
+    (Array.isArray(rows) ? rows : []).forEach((item) => {
+      if (!item) return;
+      item.__dbToolingDie = normalizeToolingStatus(item.ToolingDie);
+      item.__dbToolingBlock = normalizeToolingStatus(item.ToolingBlock);
+      item.__dbBlanket = normalizeToolingStatus(item.Blanket);
+    });
   }
 
   function formatToolingStateChip(state) {
@@ -4300,17 +4325,22 @@ if (!entry) {
           <input type="checkbox" class="user-wise-row-checkbox" data-index="${index}" data-row-id="${rowId}">
         </td>`;
       const toolingSelect = (field, processName) => {
-        const current = normalizeToolingStatus(item[field]);
-        if (viewOnly) return `<td>${current}</td>`;
+        const live = normalizeToolingStatus(item[field]);
+        const dbVal = dbToolingValue(item, field);
+        if (viewOnly) return `<td>${live}</td>`;
+        const locked = dbVal !== 'Required';
         return `<td>
           <select
             class="user-wise-tooling-select"
             data-index="${index}"
             data-field="${field}"
             data-process="${processName}"
-            data-original-value="${current}"
-            style="width: 100%; padding: 0.2rem 0.3rem; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px; font-size: 0.72rem;"
-          >${toolingStatusOptionsHtml(current)}</select>
+            data-db-value="${dbVal}"
+            data-original-value="${live}"
+            ${locked ? 'disabled' : ''}
+            title="${locked ? 'Only Required tooling can be changed to Ordered or Received' : 'Saved when you click Mark Done'}"
+            style="width: 100%; padding: 0.2rem 0.3rem; background: var(--bg-secondary); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 4px; font-size: 0.72rem;${locked ? ' opacity: 0.65; cursor: not-allowed;' : ''}"
+          >${worklistToolingOptionsHtml(live, { locked })}</select>
         </td>`;
       };
       return `<tr data-row-id="${rowId}">
@@ -4472,6 +4502,16 @@ if (!entry) {
     return true;
   }
 
+  function worklistToolingOptionsHtml(current, { locked } = {}) {
+    const n = normalizeToolingStatus(current);
+    if (locked) {
+      return `<option value="${n}" selected>${n}</option>`;
+    }
+    return USER_WISE_TOOLING_ALLOWED
+      .map((v) => `<option value="${v}" ${n === v ? 'selected' : ''}>${v}</option>`)
+      .join('');
+  }
+
   function applyToolingToMatchingRows(rowData, nextFields) {
     const match = (item) => sameArtworkJob(item, rowData);
     [window.userWiseResultsData, window.userWiseAllData].forEach((list) => {
@@ -4490,6 +4530,21 @@ if (!entry) {
         if (nextFields[field] != null) {
           sel.value = nextFields[field];
           sel.dataset.originalValue = nextFields[field];
+        }
+        const dbKey = dbToolingFieldKey(field);
+        if (dbKey && nextFields[dbKey] != null) {
+          const dbVal = normalizeToolingStatus(nextFields[dbKey]);
+          sel.dataset.dbValue = dbVal;
+          const locked = dbVal !== 'Required';
+          const live = sel.value;
+          sel.disabled = locked;
+          sel.innerHTML = worklistToolingOptionsHtml(live, { locked });
+          sel.value = live;
+          sel.title = locked
+            ? 'Only Required tooling can be changed to Ordered or Received'
+            : 'Saved when you click Mark Done';
+          sel.style.opacity = locked ? '0.65' : '';
+          sel.style.cursor = locked ? 'not-allowed' : '';
         }
       });
       const stateCell = tr.querySelector('.user-wise-tooling-state');
@@ -4796,26 +4851,59 @@ if (!entry) {
       .join('\n');
   }
 
-  async function handleUserWiseToolingChange(select) {
-    if (!select || isUserWiseViewOnly()) return;
+  function buildPendingToolingUpdateItems() {
+    const pending = [];
+    const seen = new Set();
+    const selects = elements.userWiseResultsTableBody?.querySelectorAll('.user-wise-tooling-select') || [];
 
-    const index = parseInt(select.dataset.index, 10);
-    const field = select.dataset.field;
-    const processName = select.dataset.process;
-    const previousValue = select.dataset.originalValue || 'NA';
-    const nextValue = normalizeToolingStatus(select.value);
-    const rowData = window.userWiseResultsData?.[index];
+    selects.forEach((select) => {
+      const index = parseInt(select.dataset.index, 10);
+      const rowData = window.userWiseResultsData?.[index];
+      const field = select.dataset.field;
+      if (!rowData || !field) return;
 
-    if (!rowData || !field || !processName) {
-      select.value = previousValue;
-      return;
-    }
+      const dbValue = normalizeToolingStatus(select.dataset.dbValue);
+      const liveValue = normalizeToolingStatus(select.value);
+      if (dbValue !== 'Required') return;
+      if (liveValue !== 'Ordered' && liveValue !== 'Received') return;
 
-    if (nextValue === normalizeToolingStatus(previousValue)) {
-      select.value = nextValue;
-      return;
-    }
+      const processName = select.dataset.process;
+      if (!processName) return;
 
+      const tr = select.closest('tr');
+      const remark = tr?.querySelector('.user-wise-remark-input')?.value?.trim() || null;
+      const link = tr?.querySelector('.user-wise-link-input')?.value?.trim() || null;
+      const key = `${rowData.__SourceDB || ''}|${rowData.__MongoId || rowData.ID || ''}|${field}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+
+      const item = {
+        __SourceDB: rowData.__SourceDB,
+        Operation: processName,
+        ToolingStatus: liveValue,
+        Remark: remark,
+        Link: link,
+        username: window.userWiseCurrentUsername || null,
+      };
+
+      if (rowData.__SourceDB === 'KOL_SQL' || rowData.__SourceDB === 'AMD_SQL') {
+        item.ID = rowData.ID;
+        item.ledgerid = rowData.ledgerid;
+        if (!item.ID || !item.ledgerid) return;
+      } else if (rowData.__SourceDB === 'MONGO_UNORDERED') {
+        item.__MongoId = rowData.__MongoId || rowData.ID || null;
+        if (!item.__MongoId) return;
+      } else {
+        return;
+      }
+
+      pending.push(item);
+    });
+
+    return pending;
+  }
+
+  async function persistToolingChangeNow(select, rowData, field, processName, nextValue, previousValue) {
     const row = select.closest('tr');
     const remark = row?.querySelector('.user-wise-remark-input')?.value?.trim() || null;
     const link = row?.querySelector('.user-wise-link-input')?.value?.trim() || null;
@@ -4851,7 +4939,6 @@ if (!entry) {
     }
 
     select.disabled = true;
-
     try {
       const apiBaseUrl =
         isLocalFrontend()
@@ -4874,20 +4961,63 @@ if (!entry) {
         throw new Error(firstError || errorText || result.error || 'Update failed');
       }
 
-      const nextFields = {
-        ToolingDie: field === 'ToolingDie' ? nextValue : normalizeToolingStatus(rowData.ToolingDie),
-        ToolingBlock: field === 'ToolingBlock' ? nextValue : normalizeToolingStatus(rowData.ToolingBlock),
-        Blanket: field === 'Blanket' ? nextValue : normalizeToolingStatus(rowData.Blanket),
-      };
-      nextFields.ToolingState = computeToolingState(nextFields.ToolingDie, nextFields.ToolingBlock, nextFields.Blanket);
-      nextFields.ToolingSummary = computeToolingSummary(nextFields.ToolingDie, nextFields.ToolingBlock, nextFields.Blanket);
+      const nextFields = liveToolingNextFields(rowData, field, nextValue);
+      const dbKey = dbToolingFieldKey(field);
+      if (dbKey) nextFields[dbKey] = nextValue;
       applyToolingToMatchingRows(rowData, nextFields);
-      select.disabled = false;
     } catch (error) {
       select.value = previousValue;
       select.disabled = false;
       alert(error.message || 'Error updating tooling');
     }
+  }
+
+  function liveToolingNextFields(rowData, field, nextValue) {
+    const nextFields = {
+      ToolingDie: field === 'ToolingDie' ? nextValue : normalizeToolingStatus(rowData.ToolingDie),
+      ToolingBlock: field === 'ToolingBlock' ? nextValue : normalizeToolingStatus(rowData.ToolingBlock),
+      Blanket: field === 'Blanket' ? nextValue : normalizeToolingStatus(rowData.Blanket),
+    };
+    nextFields.ToolingState = computeToolingState(nextFields.ToolingDie, nextFields.ToolingBlock, nextFields.Blanket);
+    nextFields.ToolingSummary = computeToolingSummary(nextFields.ToolingDie, nextFields.ToolingBlock, nextFields.Blanket);
+    return nextFields;
+  }
+
+  async function handleUserWiseToolingChange(select) {
+    if (!select || isUserWiseViewOnly()) return;
+
+    const index = parseInt(select.dataset.index, 10);
+    const field = select.dataset.field;
+    const processName = select.dataset.process;
+    const dbValue = normalizeToolingStatus(select.dataset.dbValue);
+    const previousValue = normalizeToolingStatus(select.dataset.originalValue);
+    const nextValue = normalizeToolingStatus(select.value);
+    const rowData = window.userWiseResultsData?.[index];
+
+    if (!rowData || !field || !processName) {
+      select.value = previousValue;
+      return;
+    }
+
+    if (dbValue !== 'Required') {
+      select.value = dbValue;
+      select.disabled = true;
+      return;
+    }
+
+    if (!USER_WISE_TOOLING_ALLOWED.includes(nextValue)) {
+      select.value = previousValue;
+      return;
+    }
+
+    if (nextValue === previousValue) return;
+
+    if (isToolingUser()) {
+      await persistToolingChangeNow(select, rowData, field, processName, nextValue, previousValue);
+      return;
+    }
+
+    applyToolingToMatchingRows(rowData, liveToolingNextFields(rowData, field, nextValue));
   }
 
   async function refreshUserWisePendingAfterUpdate() {
@@ -4905,6 +5035,7 @@ if (!entry) {
       const refreshResult = await refreshResponse.json();
       if (refreshResponse.ok && refreshResult.ok) {
         window.userWiseAllData = refreshResult.data || [];
+        stampDbTooling(window.userWiseAllData);
         applyUserWiseFilters();
         if (elements.userWiseSelectedCount) {
           elements.userWiseSelectedCount.innerHTML = '<strong>0</strong> item(s) selected';
@@ -4963,11 +5094,12 @@ if (!entry) {
       return;
     }
 
-    const itemsToUpdate = buildUserWiseUpdateItems();
-    if (itemsToUpdate.length === 0) {
+    const operationItems = buildUserWiseUpdateItems();
+    if (operationItems.length === 0) {
       alert('No valid items to update. Please ensure selected items have required fields.');
       return;
     }
+    const itemsToUpdate = [...operationItems, ...buildPendingToolingUpdateItems()];
 
     setUserWiseActionButtonsBusy(true, elements.userWiseUpdateBtn);
 
@@ -5262,6 +5394,7 @@ if (!entry) {
       
       // Store all data for filtering
       window.userWiseAllData = result.data || [];
+      stampDbTooling(window.userWiseAllData);
       
       // Initialize header sort state
       window.userWiseHeaderSort = '';
@@ -6213,6 +6346,7 @@ if (!entry) {
         throw new Error(result.error || `HTTP ${response.status}`);
       }
       window.userWiseAllData = result.data || [];
+      stampDbTooling(window.userWiseAllData);
       window.userWiseHeaderSort = '';
       if (elements.userWiseSourceFilterSection) {
         elements.userWiseSourceFilterSection.style.display = 'block';
