@@ -3887,6 +3887,7 @@ if (!entry) {
 
   // User Wise Pending Modal Functions
   async function openUserWisePendingModal() {
+    if (isToolingUser()) return;
     if (!elements.userWisePendingModal || !elements.userWiseSelect) return;
     
     // Show modal

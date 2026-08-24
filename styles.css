@@ -1539,7 +1539,8 @@ body.role-executive #user-wise-results-actions > div {
 
 /* Role: tooling — same chrome as executive, tooling columns only. */
 body.role-tooling .admin-only,
-body.role-tooling #btn-add-entry {
+body.role-tooling #btn-add-entry,
+body.role-tooling #btn-user-wise-pending {
   display: none !important;
 }
 body.role-tooling #user-wise-results-modal .user-wise-select-col,
