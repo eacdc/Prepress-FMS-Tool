@@ -15,6 +15,46 @@
       ? 'http://localhost:3001/api/artwork'
       : 'https://cdcapi.onrender.com/api/artwork';
 
+  const THEME_STORAGE_KEY = 'prepressFmsTheme';
+
+  function getStoredTheme() {
+    try {
+      const stored = localStorage.getItem(THEME_STORAGE_KEY);
+      if (stored === 'light' || stored === 'dark') return stored;
+    } catch (e) { /* ignore */ }
+    return 'dark';
+  }
+
+  function syncThemeToggle(theme) {
+    const btn = document.getElementById('theme-toggle');
+    if (!btn) return;
+    const isLight = theme === 'light';
+    const label = isLight ? 'Switch to dark mode' : 'Switch to light mode';
+    btn.setAttribute('aria-label', label);
+    btn.setAttribute('title', label);
+    btn.setAttribute('aria-pressed', isLight ? 'true' : 'false');
+  }
+
+  function applyTheme(theme) {
+    const next = theme === 'light' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, next);
+    } catch (e) { /* ignore */ }
+    syncThemeToggle(next);
+  }
+
+  function initThemeToggle() {
+    applyTheme(getStoredTheme());
+    const btn = document.getElementById('theme-toggle');
+    if (!btn || btn.dataset.bound === '1') return;
+    btn.dataset.bound = '1';
+    btn.addEventListener('click', () => {
+      const current = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+      applyTheme(current === 'light' ? 'dark' : 'light');
+    });
+  }
+
   // Set current year in footer
   const yearElement = document.getElementById('year');
   if (yearElement) {
@@ -6606,6 +6646,7 @@ if (!entry) {
   // Bootstrap: auth-gated startup
   // ============================================================
   function bootstrap() {
+    initThemeToggle();
     wireAuthEventListeners();
     const session = getSession();
     if (!session) {
