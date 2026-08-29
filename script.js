@@ -4281,7 +4281,7 @@ if (!entry) {
     const viewOnly = isUserWiseViewOnly();
     const toolingOnly = isToolingUser();
     const remarksReadOnly = viewOnly || toolingOnly;
-    const colCount = remarksReadOnly ? 17 : 18;
+    const colCount = remarksReadOnly ? 18 : 19;
     const hasLoadedData = window.userWiseAllData && window.userWiseAllData.length > 0;
     const noRows = !data || data.length === 0;
 
@@ -4400,6 +4400,7 @@ if (!entry) {
         ${toolingSelect('ToolingBlock', 'Tooling - Block')}
         ${toolingSelect('Blanket', 'Tooling - Blanket')}
         <td class="user-wise-tooling-state">${formatToolingStateChip(item.ToolingState)}</td>
+        <td class="user-wise-tooling-remark" title="${((item.ToolingRemarkText || item.ToolingRemark || '') + '').replace(/"/g, '&quot;').replace(/'/g, '&#39;')}">${((item.ToolingRemarkText || item.ToolingRemark || '') + '').replace(/"/g, '&quot;')}</td>
         ${remarksCell}
         ${linkCell}
         <td>${formatDateDDMMMYYYY(item.PlanDate)}</td>
@@ -4752,6 +4753,7 @@ if (!entry) {
       'Block',
       'Blanket',
       'Tooling',
+      'Tooling Remark',
       'Remarks',
       'Link',
       'Plan Date'
@@ -4799,6 +4801,7 @@ if (!entry) {
         normalizeToolingStatus(item.ToolingBlock),
         normalizeToolingStatus(item.Blanket),
         item.ToolingState || computeToolingState(item.ToolingDie, item.ToolingBlock, item.Blanket),
+        item.ToolingRemarkText || item.ToolingRemark || '',
         currentRemark,
         currentLink,
         formatDateDDMMMYYYY(item.PlanDate) || ''
