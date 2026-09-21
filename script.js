@@ -4142,36 +4142,47 @@ if (!entry) {
     });
   }
 
+  const USER_WISE_DATE_FIELDS = new Set(['PODate', 'FileReceivedDate', 'PlanDate']);
+  const USER_WISE_SORT_ALIASES = {
+    poDate: 'PODate',
+    planDate: 'PlanDate',
+    jobcard: 'Jobcardnumber',
+  };
+
+  function parseUserWiseSortType(sortType) {
+    if (!sortType) return null;
+    const desc = /-desc$/i.test(sortType);
+    const raw = String(sortType).replace(/-asc$|-desc$/i, '');
+    const field = USER_WISE_SORT_ALIASES[raw] || raw;
+    if (!field) return null;
+    return { field, desc };
+  }
+
   // Apply sorting preset for user-wise pending results
   function applyUserWiseSortPreset(list) {
     if (!Array.isArray(list)) return [];
 
     const preset = elements.userWiseSortPreset ? (elements.userWiseSortPreset.value || '') : '';
-    const headerSort = window.userWiseHeaderSort || ''; // Plan Date header sort
-    
-    // Use header sort if available, otherwise use preset
-    const sortType = headerSort || preset;
-    if (!sortType) return list.slice();
+    const headerSort = window.userWiseHeaderSort || '';
+    const parsed = parseUserWiseSortType(headerSort || preset);
+    if (!parsed) return list.slice();
 
     const sorted = list.slice();
-
     const getTime = (value) => {
       if (!value) return 0;
       const t = new Date(value).getTime();
       return Number.isNaN(t) ? 0 : t;
     };
 
-    if (sortType === 'poDate-asc' || sortType === 'poDate-desc') {
-      sorted.sort((a, b) => getTime(a.PODate) - getTime(b.PODate));
-      if (sortType === 'poDate-desc') sorted.reverse();
-    } else if (sortType === 'jobcard-asc' || sortType === 'jobcard-desc') {
-      sorted.sort((a, b) => (a.Jobcardnumber || '').localeCompare(b.Jobcardnumber || ''));
-      if (sortType === 'jobcard-desc') sorted.reverse();
-    } else if (sortType === 'planDate-asc' || sortType === 'planDate-desc') {
-      sorted.sort((a, b) => getTime(a.PlanDate) - getTime(b.PlanDate));
-      if (sortType === 'planDate-desc') sorted.reverse();
+    const { field, desc } = parsed;
+    if (USER_WISE_DATE_FIELDS.has(field)) {
+      sorted.sort((a, b) => getTime(a[field]) - getTime(b[field]));
+    } else {
+      sorted.sort((a, b) =>
+        String(a[field] || '').localeCompare(String(b[field] || ''), undefined, { sensitivity: 'base' })
+      );
     }
-
+    if (desc) sorted.reverse();
     return sorted;
   }
 
@@ -4434,7 +4445,7 @@ if (!entry) {
     
     // Setup column filter inputs and Plan Date header sort
     setupUserWiseColumnFilters();
-    setupPlanDateHeaderSort();
+    setupUserWiseHeaderSort();
     
     // Update selected count to show/hide actions bar and buttons appropriately
     updateSelectedCount();
@@ -5963,7 +5974,7 @@ if (!entry) {
       elements.userWiseSortPreset.addEventListener('change', () => {
         // Clear header sort when dropdown is used
         window.userWiseHeaderSort = '';
-        updatePlanDateSortIndicator('');
+        updateUserWiseSortIndicators('');
         // Re-apply filters and sorting when sort preset changes
         requestAnimationFrame(() => {
           applyUserWiseFilters();
@@ -6011,61 +6022,53 @@ if (!entry) {
     });
   }
   
-  // Setup Plan Date header sorting
-  function setupPlanDateHeaderSort() {
-    const planDateHeader = document.querySelector('#user-wise-results-table .sortable-header[data-sort-column="PlanDate"]');
-    if (planDateHeader) {
-      // Remove existing listener by cloning
-      const newHeader = planDateHeader.cloneNode(true);
-      planDateHeader.parentNode.replaceChild(newHeader, planDateHeader);
-      
+  function setupUserWiseHeaderSort() {
+    const headers = Array.from(
+      document.querySelectorAll('#user-wise-results-table .sortable-header[data-sort-column]')
+    );
+    headers.forEach((header) => {
+      const newHeader = header.cloneNode(true);
+      header.parentNode.replaceChild(newHeader, header);
       newHeader.addEventListener('click', () => {
-        const currentSort = window.userWiseHeaderSort || '';
-        let newSort = '';
-        
-        if (currentSort === 'planDate-asc') {
-          newSort = 'planDate-desc';
-        } else {
-          newSort = 'planDate-asc';
-        }
-        
+        const column = newHeader.dataset.sortColumn;
+        if (!column) return;
+        const current = parseUserWiseSortType(window.userWiseHeaderSort || '');
+        const newSort = current && current.field === column && !current.desc
+          ? `${column}-desc`
+          : `${column}-asc`;
+
         window.userWiseHeaderSort = newSort;
-        updatePlanDateSortIndicator(newSort);
-        
-        // Clear dropdown sort
+        updateUserWiseSortIndicators(newSort);
+
         if (elements.userWiseSortPreset) {
           elements.userWiseSortPreset.value = '';
         }
-        
-        // Re-apply filters and sorting
+
         requestAnimationFrame(() => {
           applyUserWiseFilters();
         });
       });
-      
-      // Update indicator based on current sort state
-      updatePlanDateSortIndicator(window.userWiseHeaderSort || '');
-    }
+    });
+    updateUserWiseSortIndicators(window.userWiseHeaderSort || '');
   }
-  
-  // Update Plan Date sort indicator
-  function updatePlanDateSortIndicator(sortType) {
-    const planDateHeader = document.querySelector('#user-wise-results-table .sortable-header[data-sort-column="PlanDate"]');
-    if (!planDateHeader) return;
-    
-    const indicator = planDateHeader.querySelector('.sort-indicator');
-    if (!indicator) return;
-    
-    if (sortType === 'planDate-asc') {
-      indicator.textContent = '↑';
-      indicator.style.opacity = '1';
-    } else if (sortType === 'planDate-desc') {
-      indicator.textContent = '↓';
-      indicator.style.opacity = '1';
-    } else {
-      indicator.textContent = '↕';
-      indicator.style.opacity = '0.5';
-    }
+
+  function updateUserWiseSortIndicators(sortType) {
+    const parsed = parseUserWiseSortType(sortType);
+    document.querySelectorAll('#user-wise-results-table .sortable-header[data-sort-column]').forEach((header) => {
+      const indicator = header.querySelector('.sort-indicator');
+      if (!indicator) return;
+      const isActive = parsed && parsed.field === header.dataset.sortColumn;
+      if (isActive && !parsed.desc) {
+        indicator.textContent = '↑';
+        indicator.style.opacity = '1';
+      } else if (isActive && parsed.desc) {
+        indicator.textContent = '↓';
+        indicator.style.opacity = '1';
+      } else {
+        indicator.textContent = '↕';
+        indicator.style.opacity = '0.5';
+      }
+    });
   }
 
   // COMMENTED OUT: User Wise Update Modal Event Listeners (no longer using modal)
