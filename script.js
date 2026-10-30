@@ -119,6 +119,21 @@
     return n.toUpperCase() === 'PENDING';
   }
 
+  // Proof (soft / hard / machine) is "sent but not approved" when status = Sent and the
+  // actual sent date is more than `days` calendar days before today.
+  const PROOF_SENT_OVERDUE_DAYS = 3;
+  function isProofSentOverdue(status, sentActDate, days = PROOF_SENT_OVERDUE_DAYS) {
+    if ((status || '').toString().trim().toLowerCase() !== 'sent') return false;
+    if (!sentActDate) return false;
+    const sent = new Date(sentActDate);
+    if (isNaN(sent.getTime())) return false;
+    const today = new Date();
+    const sentDay = new Date(sent.getFullYear(), sent.getMonth(), sent.getDate());
+    const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const ageDays = Math.round((todayDay - sentDay) / 86400000);
+    return ageDays > days;
+  }
+
   const TOOLING_OPEN = 'REQUIRED';
   const TOOLING_VALUES = ['NA', 'Old', 'Ordered', 'Required', 'Received'];
   const USER_WISE_TOOLING_ALLOWED = ['Required', 'Ordered', 'Received'];
@@ -1526,6 +1541,21 @@
         } else if (preset === 'pending-plates') {
           // 7. Pending Plates -> plate still open (Pending / blank). Done and Not Required are closed.
           if (!isPlatePending(entry.plateOutput)) {
+            return false;
+          }
+        } else if (preset === 'soft-sent-not-approved') {
+          // 8. Softcopy sent but not approved for more than 3 days
+          if (!isProofSentOverdue(entry.softApprovalStatus, entry.softApprovalSentActDate)) {
+            return false;
+          }
+        } else if (preset === 'hard-sent-not-approved') {
+          // 9. Hardcopy sent but not approved for more than 3 days
+          if (!isProofSentOverdue(entry.hardApprovalStatus, entry.hardApprovalSentActDate)) {
+            return false;
+          }
+        } else if (preset === 'mproof-sent-not-approved') {
+          // 10. Machine proof sent but not approved for more than 3 days
+          if (!isProofSentOverdue(entry.mProofApprovalStatus, entry.mProofApprovalSentActDate)) {
             return false;
           }
         }
