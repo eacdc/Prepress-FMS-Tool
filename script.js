@@ -1681,6 +1681,7 @@
     34: 'blanket',            // Blanket
     36: 'platePerson',        // Plate Person
     37: 'plateOutput',        // Plate Output
+    40: 'plateRemark',        // Plate Remark
   };
 
   // Get entry value by column key
@@ -2568,7 +2569,20 @@
         </td>
         <td class="${plateNotRequired ? 'plate-field-disabled' : ''}" title="${plateNotRequired ? 'Not required when Plate Output is Not Required' : ''}">${plateNotRequired ? '—' : platePlanFmt}</td>
         <td>${plateActualFmt}</td>
-        <td>${entry.plateRemark || ''}</td>
+        <td>
+          ${
+            canEditMainGridField('plateRemark')
+              ? `<input
+                  type="text"
+                  class="${getEditableClass('cell-input', entryId, 'plateRemark')}"
+                  data-field="plateRemark"
+                  data-col-index="40"
+                  value="${(entry.plateRemark || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}"
+                  placeholder="Click to edit"
+                />`
+              : `${(entry.plateRemark || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}`
+          }
+        </td>
       </tr>`;
     }).join('');
 
@@ -4288,8 +4302,13 @@ if (!entry) {
     'toolingRemark',
   ]);
 
+  function isExecutiveUser() {
+    const s = getSession();
+    return !!(s && s.role === 'executive');
+  }
+
   function canEditToolingRemarkField() {
-    return isAdminUser() || isToolingUser();
+    return isAdminUser() || isToolingUser() || isExecutiveUser();
   }
 
   function canEditMainGridField(field) {
